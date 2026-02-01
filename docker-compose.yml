@@ -1,0 +1,63 @@
+services:
+  aseity:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace
+      - ${HOME}/.config/aseity:/root/.config/aseity
+    environment:
+      - ASEITY_PROVIDER=ollama
+      - ASEITY_BASE_URL=http://ollama:11434/v1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - aseity-net
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - aseity-net
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    ports:
+      - "8000:8000"
+    command: >
+      --model Qwen/Qwen2.5-Coder-7B-Instruct
+      --dtype auto
+      --max-model-len 8192
+    profiles:
+      - vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - aseity-net
+
+volumes:
+  ollama_data:
+
+networks:
+  aseity-net:

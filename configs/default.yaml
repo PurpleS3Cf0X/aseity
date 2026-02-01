@@ -1,0 +1,45 @@
+# Aseity Configuration
+# Place this file at ~/.config/aseity/config.yaml
+
+default_provider: ollama
+default_model: llama3.2
+
+providers:
+  ollama:
+    type: openai
+    base_url: http://localhost:11434/v1
+
+  vllm:
+    type: openai
+    base_url: http://localhost:8000/v1
+
+  openai:
+    type: openai
+    base_url: https://api.openai.com/v1
+    api_key: $OPENAI_API_KEY
+
+  anthropic:
+    type: anthropic
+    api_key: $ANTHROPIC_API_KEY
+
+  google:
+    type: google
+    api_key: $GEMINI_API_KEY
+
+  huggingface:
+    type: openai
+    base_url: https://api-inference.huggingface.co/v1
+    api_key: $HF_TOKEN
+
+tools:
+  auto_approve:
+    - file_read
+    - file_search
+  allowed_commands:
+    - git
+    - go
+    - npm
+    - make
+    - python
+    - cargo
+    - docker
