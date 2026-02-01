@@ -32,6 +32,7 @@ type ToolDef struct {
 
 type StreamChunk struct {
 	Delta     string
+	Thinking  string // Model's internal reasoning/chain-of-thought
 	ToolCalls []ToolCall
 	Done      bool
 	Error     error

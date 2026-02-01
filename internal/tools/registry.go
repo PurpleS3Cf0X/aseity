@@ -65,4 +65,10 @@ func RegisterDefaults(r *Registry) {
 	r.Register(&FileReadTool{})
 	r.Register(&FileWriteTool{})
 	r.Register(&FileSearchTool{})
+	r.Register(&WebSearchTool{})
+	r.Register(&WebFetchTool{})
+	r.Register(&SystemInfoTool{})
+	r.Register(&ProcessListTool{})
+	r.Register(&NetworkInfoTool{})
+	r.Register(&ClipboardTool{})
 }

@@ -143,6 +143,7 @@ func (a *AnthropicProvider) Chat(ctx context.Context, msgs []Message, tools []To
 		var currentToolID, currentToolName string
 		var toolArgsBuilder strings.Builder
 		var toolCalls []ToolCall
+		inThinkingBlock := false
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -156,19 +157,27 @@ func (a *AnthropicProvider) Chat(ctx context.Context, msgs []Message, tools []To
 			}
 			switch evt.Type {
 			case "content_block_start":
-				if evt.ContentBlock != nil && evt.ContentBlock.Type == "tool_use" {
-					currentToolID = evt.ContentBlock.ID
-					currentToolName = evt.ContentBlock.Name
-					toolArgsBuilder.Reset()
+				if evt.ContentBlock != nil {
+					switch evt.ContentBlock.Type {
+					case "tool_use":
+						currentToolID = evt.ContentBlock.ID
+						currentToolName = evt.ContentBlock.Name
+						toolArgsBuilder.Reset()
+					case "thinking":
+						inThinkingBlock = true
+					}
 				}
 			case "content_block_delta":
 				var delta struct {
 					Type        string `json:"type"`
 					Text        string `json:"text"`
+					Thinking    string `json:"thinking"`
 					PartialJSON string `json:"partial_json"`
 				}
 				json.Unmarshal(evt.Delta, &delta)
-				if delta.Type == "text_delta" {
+				if delta.Type == "thinking_delta" {
+					ch <- StreamChunk{Thinking: delta.Thinking}
+				} else if delta.Type == "text_delta" {
 					ch <- StreamChunk{Delta: delta.Text}
 				} else if delta.Type == "input_json_delta" {
 					toolArgsBuilder.WriteString(delta.PartialJSON)
@@ -179,6 +188,9 @@ func (a *AnthropicProvider) Chat(ctx context.Context, msgs []Message, tools []To
 						ID: currentToolID, Name: currentToolName, Args: toolArgsBuilder.String(),
 					})
 					currentToolID = ""
+				}
+				if inThinkingBlock {
+					inThinkingBlock = false
 				}
 			case "message_stop":
 				ch <- StreamChunk{Done: true, ToolCalls: toolCalls}

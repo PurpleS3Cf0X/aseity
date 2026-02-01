@@ -86,6 +86,21 @@ var (
 	// Help text
 	HelpStyle = lipgloss.NewStyle().
 			Foreground(DimGreen)
+
+	// Thinking blocks
+	ThinkingLabelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#556B2F")).
+				Italic(true).
+				Bold(true)
+
+	ThinkingStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#4a5a3a")).
+			Italic(true)
+
+	// Sub-agent activity
+	SubAgentStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00AA77")).
+			Italic(true)
 )
 
 const Banner = `

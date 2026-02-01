@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/jeanpaul/aseity/internal/agent"
 	"github.com/jeanpaul/aseity/internal/config"
 	"github.com/jeanpaul/aseity/internal/health"
 	"github.com/jeanpaul/aseity/internal/model"
@@ -115,6 +116,11 @@ func main() {
 
 	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove)
 	tools.RegisterDefaults(toolReg)
+
+	// Set up agent manager and register agent tools
+	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
+	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
+	toolReg.Register(tools.NewListAgentsTool(agentMgr))
 
 	m := tui.NewModel(prov, toolReg, provName, modelName)
 	p := tea.NewProgram(m, tea.WithAltScreen())

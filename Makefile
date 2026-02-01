@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS  = -s -w -X github.com/jeanpaul/aseity/pkg/version.Version=$(VERSION) -X github.com/jeanpaul/aseity/pkg/version.Commit=$(COMMIT)
 
-.PHONY: build install clean docker docker-up docker-down deps fmt lint
+.PHONY: build install clean docker docker-up docker-down deps fmt lint release
 
 build:
 	go build -ldflags="$(LDFLAGS)" -o bin/aseity ./cmd/aseity
@@ -20,7 +20,16 @@ lint:
 	golangci-lint run ./...
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ dist/
+
+# Cross-compile for all platforms
+release:
+	@mkdir -p dist
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o dist/aseity-darwin-arm64  ./cmd/aseity
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o dist/aseity-darwin-amd64  ./cmd/aseity
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o dist/aseity-linux-amd64   ./cmd/aseity
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o dist/aseity-linux-arm64   ./cmd/aseity
+	@echo "Binaries in dist/"
 
 # Docker
 docker:

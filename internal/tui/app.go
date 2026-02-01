@@ -26,6 +26,7 @@ type Model struct {
 	spinner       spinner.Model
 	messages      []chatMessage
 	thinking      bool
+	showThinking  bool // toggle thinking block visibility
 	providerName  string
 	modelName     string
 
@@ -74,6 +75,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		viewport:     vp,
 		textarea:     ta,
 		spinner:      sp,
+		showThinking: true,
 		providerName: provName,
 		modelName:    modelName,
 		prov:         prov,
@@ -120,6 +122,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.cancelCtx()
 			return m, tea.Quit
+		case tea.KeyCtrlT:
+			// Toggle thinking visibility
+			m.showThinking = !m.showThinking
+			m.rebuildView()
+			return m, nil
 		case tea.KeyEnter:
 			if msg.Alt {
 				break // alt+enter = newline in textarea
@@ -141,6 +148,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentEventMsg:
 		evt := agent.Event(msg)
 		switch evt.Type {
+		case agent.EventThinking:
+			// Append to or create a thinking message block
+			if len(m.messages) == 0 || m.messages[len(m.messages)-1].role != "thinking" {
+				m.messages = append(m.messages, chatMessage{role: "thinking"})
+			}
+			m.messages[len(m.messages)-1].content += evt.Text
+
 		case agent.EventDelta:
 			if len(m.messages) == 0 || m.messages[len(m.messages)-1].role != "assistant" {
 				m.messages = append(m.messages, chatMessage{role: "assistant"})
@@ -218,6 +232,27 @@ func (m *Model) rebuildView() {
 		case "user":
 			sb.WriteString(UserLabelStyle.Render("  You") + "\n")
 			sb.WriteString(UserMsgStyle.Render("  "+msg.content) + "\n\n")
+		case "thinking":
+			if m.showThinking && msg.content != "" {
+				sb.WriteString(ThinkingLabelStyle.Render("  ▸ Thinking") + "\n")
+				lines := strings.Split(msg.content, "\n")
+				// Show up to 20 lines, collapse the rest
+				maxLines := 20
+				if len(lines) > maxLines {
+					for _, line := range lines[:maxLines] {
+						sb.WriteString(ThinkingStyle.Render("    "+line) + "\n")
+					}
+					sb.WriteString(ThinkingStyle.Render(fmt.Sprintf("    ... (%d more lines, Ctrl+T to toggle)", len(lines)-maxLines)) + "\n")
+				} else {
+					for _, line := range lines {
+						sb.WriteString(ThinkingStyle.Render("    "+line) + "\n")
+					}
+				}
+				sb.WriteString("\n")
+			} else if !m.showThinking && msg.content != "" {
+				lines := strings.Count(msg.content, "\n") + 1
+				sb.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("  ▸ Thinking (%d lines, Ctrl+T to expand)", lines)) + "\n\n")
+			}
 		case "assistant":
 			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
 			for _, line := range strings.Split(msg.content, "\n") {
@@ -232,6 +267,8 @@ func (m *Model) rebuildView() {
 			}
 		case "error":
 			sb.WriteString(ErrorStyle.Render("  Error: "+msg.content) + "\n\n")
+		case "subagent":
+			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
 		}
 	}
 	if m.thinking {
@@ -243,10 +280,15 @@ func (m *Model) rebuildView() {
 
 func (m Model) View() string {
 	// Header
+	thinkLabel := ""
+	if m.showThinking {
+		thinkLabel = " [thinking:on]"
+	}
 	header := StatusProviderStyle.Render(" "+m.providerName) +
 		StatusBarStyle.Render(" "+m.modelName+" ") +
-		StatusBarStyle.Copy().Width(m.width-lipgloss.Width(m.providerName)-lipgloss.Width(m.modelName)-6).
-			Render("aseity")
+		StatusBarStyle.Copy().Width(m.width-lipgloss.Width(m.providerName)-lipgloss.Width(m.modelName)-6-len(thinkLabel)).
+			Render("aseity") +
+		HelpStyle.Render(thinkLabel)
 	separator := SeparatorStyle.Render(strings.Repeat("─", m.width))
 
 	// Input
@@ -256,7 +298,10 @@ func (m Model) View() string {
 	}
 	input := inputStyle.Width(m.width - 4).Render(m.textarea.View())
 
-	return header + "\n" + separator + "\n" + m.viewport.View() + "\n" + input
+	// Help bar
+	help := HelpStyle.Render("  Enter:send  Alt+Enter:newline  Ctrl+T:toggle thinking  Ctrl+C:cancel  Esc:quit")
+
+	return header + "\n" + separator + "\n" + m.viewport.View() + "\n" + input + "\n" + help
 }
 
 func truncate(s string, n int) string {

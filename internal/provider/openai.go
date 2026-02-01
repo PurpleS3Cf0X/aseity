@@ -158,8 +158,10 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 		defer close(ch)
 		defer resp.Body.Close()
 		scanner := bufio.NewScanner(resp.Body)
-		// accumulate tool calls across chunks
 		toolCalls := map[int]*ToolCall{}
+		// Track <think> blocks for reasoning models (DeepSeek-R1, QwQ, etc.)
+		inThink := false
+		var contentBuf strings.Builder
 		for scanner.Scan() {
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
@@ -167,7 +169,6 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
-				// emit accumulated tool calls
 				var tcs []ToolCall
 				for _, tc := range toolCalls {
 					tcs = append(tcs, *tc)
@@ -184,7 +185,38 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 			}
 			delta := chunk.Choices[0].Delta
 			if delta.Content != "" {
-				ch <- StreamChunk{Delta: delta.Content}
+				// Parse <think>...</think> blocks from reasoning models
+				contentBuf.WriteString(delta.Content)
+				text := contentBuf.String()
+
+				if !inThink && strings.Contains(text, "<think>") {
+					// Split: content before <think> is regular, rest is thinking
+					parts := strings.SplitN(text, "<think>", 2)
+					if parts[0] != "" {
+						ch <- StreamChunk{Delta: parts[0]}
+					}
+					inThink = true
+					contentBuf.Reset()
+					contentBuf.WriteString(parts[1])
+				} else if inThink && strings.Contains(text, "</think>") {
+					parts := strings.SplitN(text, "</think>", 2)
+					if parts[0] != "" {
+						ch <- StreamChunk{Thinking: parts[0]}
+					}
+					inThink = false
+					contentBuf.Reset()
+					if parts[1] != "" {
+						contentBuf.WriteString(parts[1])
+						ch <- StreamChunk{Delta: parts[1]}
+					}
+				} else if inThink {
+					// Emit thinking content as it streams
+					ch <- StreamChunk{Thinking: delta.Content}
+					contentBuf.Reset()
+				} else {
+					ch <- StreamChunk{Delta: delta.Content}
+					contentBuf.Reset()
+				}
 			}
 			for _, tc := range delta.ToolCalls {
 				idx := 0

@@ -26,6 +26,7 @@ type EventType int
 
 const (
 	EventDelta EventType = iota
+	EventThinking
 	EventToolCall
 	EventToolResult
 	EventDone
@@ -68,6 +69,9 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 			if chunk.Error != nil {
 				events <- Event{Type: EventError, Error: chunk.Error.Error(), Done: true}
 				return
+			}
+			if chunk.Thinking != "" {
+				events <- Event{Type: EventThinking, Text: chunk.Thinking}
 			}
 			if chunk.Delta != "" {
 				textBuf.WriteString(chunk.Delta)
