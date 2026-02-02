@@ -51,8 +51,26 @@ var (
 			Foreground(DarkGreen).
 			Italic(true)
 
+	ToolLabelStyle = lipgloss.NewStyle().
+			Foreground(MedGreen).
+			Bold(true)
+
+	CommandStyle = lipgloss.NewStyle().
+			Foreground(BrightGreen).
+			Bold(true)
+
 	ToolResultStyle = lipgloss.NewStyle().
 			Foreground(MidGray)
+
+	// Confirmation dialog
+	ConfirmStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD700")).
+			Bold(true)
+
+	ConfirmInputStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#FFD700")).
+				Padding(0, 1)
 
 	// Input
 	InputBorderStyle = lipgloss.NewStyle().

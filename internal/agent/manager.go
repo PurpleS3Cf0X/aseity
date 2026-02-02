@@ -77,10 +77,17 @@ func (am *AgentManager) Spawn(ctx context.Context, task string) (int, error) {
 	am.mu.Unlock()
 
 	go func() {
-		confirmFn := func(toolName, args string) bool {
-			return true
-		}
-		ag := New(am.prov, am.toolReg, confirmFn)
+		ag := New(am.prov, am.toolReg)
+		// Sub-agents auto-approve all tools
+		go func() {
+			for {
+				select {
+				case ag.ConfirmCh <- true:
+				case <-subCtx.Done():
+					return
+				}
+			}
+		}()
 
 		events := make(chan Event, 64)
 		var output strings.Builder

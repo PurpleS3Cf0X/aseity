@@ -11,15 +11,14 @@ import (
 )
 
 type Event struct {
-	Type      EventType
-	Text      string
-	ToolName  string
-	ToolArgs  string
-	ToolID    string
-	Result    string
-	Error     string
-	Done      bool
-	NeedConfirm bool
+	Type     EventType
+	Text     string
+	ToolName string
+	ToolArgs string
+	ToolID   string
+	Result   string
+	Error    string
+	Done     bool
 }
 
 type EventType int
@@ -29,24 +28,29 @@ const (
 	EventThinking
 	EventToolCall
 	EventToolResult
+	EventConfirmRequest // sent when a tool needs user approval
 	EventDone
 	EventError
-	EventConfirmRequest
 )
 
-type ConfirmFunc func(toolName, args string) bool
-
+// ConfirmChan is used by the agent to ask the TUI for approval.
+// The agent sends a confirm request event, then blocks reading from this channel.
 type Agent struct {
-	prov    provider.Provider
-	tools   *tools.Registry
-	conv    *Conversation
-	confirm ConfirmFunc
+	prov       provider.Provider
+	tools      *tools.Registry
+	conv       *Conversation
+	ConfirmCh  chan bool // TUI sends true/false here
 }
 
-func New(prov provider.Provider, registry *tools.Registry, confirmFn ConfirmFunc) *Agent {
+func New(prov provider.Provider, registry *tools.Registry) *Agent {
 	conv := NewConversation()
 	conv.AddSystem(BuildSystemPrompt())
-	return &Agent{prov: prov, tools: registry, conv: conv, confirm: confirmFn}
+	return &Agent{
+		prov:      prov,
+		tools:     registry,
+		conv:      conv,
+		ConfirmCh: make(chan bool, 1),
+	}
 }
 
 func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
@@ -90,24 +94,42 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 			return
 		}
 
-		// Execute tool calls
 		for _, tc := range toolCalls {
-			events <- Event{Type: EventToolCall, ToolName: tc.Name, ToolArgs: tc.Args, ToolID: tc.ID}
+			prettyArgs := formatToolArgs(tc.Name, tc.Args)
 
+			// Send the tool call event (shows what's about to run)
+			events <- Event{
+				Type: EventToolCall, ToolName: tc.Name,
+				ToolArgs: prettyArgs, ToolID: tc.ID,
+			}
+
+			// If confirmation needed, ask the TUI and block
 			if a.tools.NeedsConfirmation(tc.Name) {
-				if a.confirm != nil && !a.confirm(tc.Name, tc.Args) {
-					result := "User denied this tool call."
-					a.conv.AddToolResult(tc.ID, result)
-					events <- Event{Type: EventToolResult, ToolID: tc.ID, Result: result}
-					continue
+				events <- Event{
+					Type: EventConfirmRequest, ToolName: tc.Name,
+					ToolArgs: prettyArgs, ToolID: tc.ID,
+				}
+
+				// Block until TUI responds
+				select {
+				case approved := <-a.ConfirmCh:
+					if !approved {
+						result := "User denied this operation."
+						a.conv.AddToolResult(tc.ID, result)
+						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: result}
+						continue
+					}
+				case <-ctx.Done():
+					return
 				}
 			}
 
+			// Execute
 			res, err := a.tools.Execute(ctx, tc.Name, tc.Args)
 			if err != nil {
 				errMsg := fmt.Sprintf("tool execution error: %s", err.Error())
 				a.conv.AddToolResult(tc.ID, errMsg)
-				events <- Event{Type: EventToolResult, ToolID: tc.ID, Error: errMsg}
+				events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Error: errMsg}
 				continue
 			}
 
@@ -116,25 +138,52 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 				output += "\nError: " + res.Error
 			}
 			a.conv.AddToolResult(tc.ID, output)
-
-			// pretty-print abbreviated args
-			var prettyArgs string
-			var parsed map[string]any
-			if json.Unmarshal([]byte(tc.Args), &parsed) == nil {
-				if cmd, ok := parsed["command"]; ok {
-					prettyArgs = fmt.Sprintf("%v", cmd)
-				} else if p, ok := parsed["path"]; ok {
-					prettyArgs = fmt.Sprintf("%v", p)
-				}
+			events <- Event{
+				Type: EventToolResult, ToolID: tc.ID,
+				ToolName: tc.Name, ToolArgs: prettyArgs, Result: output,
 			}
-			if prettyArgs == "" {
-				prettyArgs = tc.Args
-				if len(prettyArgs) > 80 {
-					prettyArgs = prettyArgs[:80] + "..."
-				}
-			}
-			events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, ToolArgs: prettyArgs, Result: output}
 		}
-		// Loop again so the model can see tool results
 	}
+}
+
+func formatToolArgs(toolName, rawArgs string) string {
+	var parsed map[string]any
+	if json.Unmarshal([]byte(rawArgs), &parsed) != nil {
+		if len(rawArgs) > 80 {
+			return rawArgs[:80] + "..."
+		}
+		return rawArgs
+	}
+
+	switch toolName {
+	case "bash":
+		if cmd, ok := parsed["command"]; ok {
+			return fmt.Sprintf("%v", cmd)
+		}
+	case "file_read", "file_write":
+		if p, ok := parsed["path"]; ok {
+			return fmt.Sprintf("%v", p)
+		}
+	case "file_search":
+		if p, ok := parsed["pattern"]; ok {
+			return fmt.Sprintf("pattern=%v", p)
+		}
+		if g, ok := parsed["grep"]; ok {
+			return fmt.Sprintf("grep=%v", g)
+		}
+	case "web_search":
+		if q, ok := parsed["query"]; ok {
+			return fmt.Sprintf("%v", q)
+		}
+	case "web_fetch":
+		if u, ok := parsed["url"]; ok {
+			return fmt.Sprintf("%v", u)
+		}
+	}
+
+	s := rawArgs
+	if len(s) > 80 {
+		s = s[:80] + "..."
+	}
+	return s
 }
