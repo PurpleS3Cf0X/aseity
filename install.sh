@@ -5,16 +5,8 @@ set -e
 # Usage: curl -fsSL https://raw.githubusercontent.com/PurpleS3Cf0X/aseity/master/install.sh | sh
 
 # Ensure we can interact with the user even if piped
-if [ -t 0 ]; then
-    # Stdin is a terminal, all good
-    :
-else
-    # Stdin is not a terminal (likely piped from curl)
-    # Try to reopen stdin from /dev/tty if available
-    if [ -e /dev/tty ]; then
-        exec < /dev/tty
-    fi
-fi
+# logic moved to confirm function to avoid breaking "curl | sh"
+# (exec < /dev/tty would cause sh to stop reading the script from the pipe)
 
 REPO="PurpleS3Cf0X/aseity"
 INSTALL_DIR="/usr/local/bin"
@@ -35,7 +27,15 @@ error() { printf "${RED}✗${NC} %s\n" "$1" >&2; exit 1; }
 # Interactive Yes/No prompt
 confirm() {
     ask "$1"
-    read -r response
+    if [ -t 0 ]; then
+        read -r response
+    elif [ -e /dev/tty ]; then
+        # Read explicitly from TTY if stdin is a pipe
+        read -r response < /dev/tty
+    else
+        read -r response
+    fi
+    
     case "$response" in
         [yY][eE][sS]|[yY]|"") return 0 ;;
         *) return 1 ;;
