@@ -19,6 +19,8 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Thinking visibility** — See the model's reasoning process (for supported models)
 - **Auto-setup** — First-run wizard installs and configures everything
 - **Auto-approve** — Optional `-y` flag to skip permission prompts for trusted sessions
+- **Headless Mode** — Scriptable CLI mode for automation (`aseity --headless "scan" > report.txt`)
+- **Smart Output** — Automatically truncates and saves large tool outputs (e.g., nmap scans) to files
 
 ## Quick Start
 
@@ -63,7 +65,22 @@ aseity --model llama3.2
 aseity --provider anthropic --model claude-sonnet-4-20250514
 # Non-interactive mode (auto-approve all tools)
 aseity -y "create a bash file called test.sh"
+
+### Headless & Scripting (New in v1.0.4)
+
+Aseity can run without the UI, perfect for piping and automation:
+
+```bash
+# Explicit headless mode
+aseity --headless "Summarize README.md"
+
+# Implicit headless (just by providing a command)
+aseity "Check disk space on /" > output.txt
+
+# Pipe output to other tools
+aseity -y "Scan localhost ports" | grep "80/tcp"
 ```
+
 
 ### In the Chat
 
@@ -124,6 +141,21 @@ aseity setup
 # Setup with Docker instead of local Ollama
 aseity setup --docker
 ```
+
+### Advanced Capabilities
+
+#### Recursive Agents
+Aseity can spawn sub-agents to handle complex tasks:
+
+```bash
+aseity "Spawn an agent to research the Log4j vulnerability and save a report"
+```
+The main agent will delegate the task, wait for the sub-agent to finish, and present the final result.
+
+#### Safety & Large Outputs
+- **Safety**: `aseity -y` bypasses confirmation, but dangerous commands (like `rm -rf /`) remain blocked by default.
+- **Smart Truncation**: If a tool (like `nmap` or `grep`) produces thousands of lines, Aseity automatically saves the **full output** to a temp file and only shows a preview to the agent to prevent context overflow.
+
 
 ## Configuration
 
