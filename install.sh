@@ -4,19 +4,83 @@ set -e
 # Aseity installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/PurpleS3Cf0X/aseity/master/install.sh | sh
 
+# Ensure we can interact with the user even if piped
+if [ -t 0 ]; then
+    # Stdin is a terminal, all good
+    :
+else
+    # Stdin is not a terminal (likely piped from curl)
+    # Try to reopen stdin from /dev/tty if available
+    if [ -e /dev/tty ]; then
+        exec < /dev/tty
+    fi
+fi
+
 REPO="PurpleS3Cf0X/aseity"
 INSTALL_DIR="/usr/local/bin"
 BINARY="aseity"
 
 GREEN='\033[0;32m'
 BRIGHT_GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
 DIM='\033[2m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 info() { printf "${GREEN}▸${NC} %s\n" "$1"; }
+ask() { printf "${YELLOW}▸ %s [Y/n]${NC} " "$1"; }
 success() { printf "${BRIGHT_GREEN}✓${NC} %s\n" "$1"; }
 error() { printf "${RED}✗${NC} %s\n" "$1" >&2; exit 1; }
+
+# Interactive Yes/No prompt
+confirm() {
+    ask "$1"
+    read -r response
+    case "$response" in
+        [yY][eE][sS]|[yY]|"") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Detect Package Manager
+detect_pkg_manager() {
+    if command -v brew >/dev/null 2>&1; then
+        PkgManager="brew"
+        InstallCmd="brew install"
+    elif command -v apt-get >/dev/null 2>&1; then
+        PkgManager="apt"
+        InstallCmd="sudo apt-get install -y"
+    elif command -v dnf >/dev/null 2>&1; then
+        PkgManager="dnf"
+        InstallCmd="sudo dnf install -y"
+    elif command -v pacman >/dev/null 2>&1; then
+        PkgManager="pacman"
+        InstallCmd="sudo pacman -S --noconfirm"
+    else
+        PkgManager=""
+    fi
+}
+
+detect_pkg_manager
+
+ensure_cmd() {
+    cmd=$1
+    pkg=$2
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        info "$cmd is missing."
+        if [ -n "$PkgManager" ]; then
+            if confirm "Would you like to install '$pkg' using $PkgManager?"; then
+                info "Installing $pkg..."
+                $InstallCmd "$pkg"
+                success "$pkg installed"
+            else
+                error "$cmd is required to proceed. Please install it manually."
+            fi
+        else
+            error "$cmd is required but no supported package manager found. Please install '$pkg' manually."
+        fi
+    fi
+}
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -36,29 +100,32 @@ esac
 
 info "Detected ${OS}/${ARCH}"
 
+# Ensure we have curl or wget
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    ensure_cmd curl curl
+fi
+
 # Get latest release tag
 info "Fetching latest release..."
 if command -v curl >/dev/null 2>&1; then
     LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
 elif command -v wget >/dev/null 2>&1; then
     LATEST=$(wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
-else
-    error "Neither curl nor wget found. Install one and retry."
 fi
 
 if [ -z "$LATEST" ]; then
     # No release yet, build from source
-    info "No release found. Building from source..."
+    info "No binary release found for this detection. Building from source..."
 
-    if ! command -v go >/dev/null 2>&1; then
-        error "Go is required to build from source. Install Go: https://go.dev/dl/"
-    fi
+    # Ensure dependencies for building
+    ensure_cmd git git
+    ensure_cmd go golang
 
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
     info "Cloning repository..."
-    git clone --depth 1 "https://github.com/${REPO}.git" "$TMPDIR/aseity" 2>/dev/null
+    git clone --depth 1 "https://github.com/${REPO}.git" "$TMPDIR/aseity"
 
     info "Building..."
     cd "$TMPDIR/aseity"
@@ -68,7 +135,11 @@ if [ -z "$LATEST" ]; then
     if [ -w "$INSTALL_DIR" ]; then
         mv "${BINARY}" "${INSTALL_DIR}/${BINARY}"
     else
-        sudo mv "${BINARY}" "${INSTALL_DIR}/${BINARY}"
+        if confirm "Install to ${INSTALL_DIR}? (Requires sudo)"; then
+            sudo mv "${BINARY}" "${INSTALL_DIR}/${BINARY}"
+        else
+            error "Installation aborted."
+        fi
     fi
 
     success "Installed aseity $(${INSTALL_DIR}/${BINARY} --version)"
@@ -98,7 +169,12 @@ info "Installing to ${INSTALL_DIR}/${BINARY}..."
 if [ -w "$INSTALL_DIR" ]; then
     mv "$TMPFILE" "${INSTALL_DIR}/${BINARY}"
 else
-    sudo mv "$TMPFILE" "${INSTALL_DIR}/${BINARY}"
+    # Check explicitly if we need sudo
+    if confirm "Install to ${INSTALL_DIR}? (Requires sudo)"; then
+        sudo mv "$TMPFILE" "${INSTALL_DIR}/${BINARY}"
+    else
+        error "Installation aborted."
+    fi
 fi
 
 success "Installed aseity ${LATEST}"
