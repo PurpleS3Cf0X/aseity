@@ -243,6 +243,7 @@ Aseity can use these tools to help you:
 | `file_search` | Find files by pattern or content | No |
 | `web_search` | Search the web via DuckDuckGo | No |
 | `web_fetch` | Fetch and read web pages | No |
+| `web_crawl` | Crawl dynamic websites using a real browser (or HTTP fallback) | No |
 | `spawn_agent` | Create a sub-agent (supports recursive delegation) | Yes |
 | `list_agents` | List running sub-agents | No |
 

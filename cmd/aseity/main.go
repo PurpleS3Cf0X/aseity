@@ -80,6 +80,9 @@ func main() {
 		case "providers":
 			cmdProviders()
 			return
+		case "tools":
+			cmdTools()
+			return
 		case "doctor":
 			cmdDoctor()
 			return
@@ -374,6 +377,43 @@ func cmdDoctor() {
 	}
 }
 
+func cmdTools() {
+	cfg, err := config.Load()
+	if err != nil {
+		fatal("config error: %s", err)
+	}
+
+	// Create a temporary registry to see what tools are available
+	// We don't need a real provider or agent manager here, just the definitions.
+	reg := tools.NewRegistry(cfg.Tools.AutoApprove, false)
+
+	// We pass nil for AgentFactory because we just want to list the tool, not execute it.
+	// But Wait, tools.RegisterDefaults needs an interface.
+	// We can pass a dummy implementation or just nil if SpawnAgentTool handles nil gracefully during registration (it doesn't typically).
+	// Actually, SpawnAgentTool struct just holds it. Implementation matters only during Execution.
+	// Let's check NewSpawnAgentTool.
+	// tools.NewSpawnAgentTool(nil) should be fine structurally.
+	tools.RegisterDefaults(reg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
+
+	fmt.Println(tui.BannerStyle.Render("  Available Tools"))
+	fmt.Println()
+
+	// Convert map to slice for sorting? Registry.ToolDefs() returns slice.
+	defs := reg.ToolDefs()
+
+	for _, t := range defs {
+		confirm := " "
+		if reg.NeedsConfirmation(t.Name) {
+			confirm = tui.WarningStyle.Render("(requires approval)")
+		} else {
+			confirm = tui.HelpStyle.Render("(auto)")
+		}
+
+		fmt.Printf("  %s %s\n", tui.UserLabelStyle.Render(t.Name), confirm)
+		fmt.Printf("    %s\n\n", tui.HelpStyle.Render(t.Description))
+	}
+}
+
 func cmdSetup(docker bool) {
 	cfg, _ := config.Load()
 	modelName := cfg.DefaultModel
@@ -493,7 +533,9 @@ func showHelp() {
   pull <model>                Download a model (e.g., deepseek-r1, llama3.2)
   remove <model>              Remove a downloaded model
   search <query>              Search HuggingFace for GGUF models
+  search <query>              Search HuggingFace for GGUF models
   providers                   List configured providers
+  tools                       List available tools
   doctor                      Check health of all services
   setup [--docker]            Run first-time setup wizard
   help                        Show this help
