@@ -79,6 +79,42 @@ func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, p
 				fmt.Fprintf(os.Stderr, "\n[Auto-Approving Tool Use: %s]\n", evt.ToolName)
 				agt.ConfirmCh <- true
 
+			case agent.EventInputRequest:
+				// In headless mode, if we are attached to a terminal, we can try to read input.
+				fmt.Fprintf(os.Stderr, "\n[Input Required by Tool (e.g. Password)]: ")
+				// Read line from Stdin
+				var input string
+				// Consider using bufio.NewReader for full lines including spaces
+				// But fmt.Scanln is simple for now.
+				// Better:
+				// reader := bufio.NewReader(os.Stdin)
+				// input, _ = reader.ReadString('\n')
+				// But creating reader per event is bad.
+				// Let's just assume we can't reliably read in strict headless.
+				// But to avoid HANG, we must send SOMETHING.
+				// If we leave it, it hangs.
+				// Let's try to read one line.
+				// NOTE: If this is running in a proper headless script (cron), this reads EOF and sends empty immediately.
+
+				// Quick implementation:
+				// input = GetStdinLine() ...
+
+				// For now, let's just fail or send empty newline to unblock?
+				// User wants it to WAIT.
+				// "is it not possible for the program to wait"
+				// So we should try to read.
+
+				// Note: 'events' loop is single threaded here.
+				// We block processing other events (like streaming) while waiting for user.
+				// That's acceptable for "Synchronous input".
+
+				var buf [1024]byte
+				n, _ := os.Stdin.Read(buf[:])
+				if n > 0 {
+					input = string(buf[:n])
+				}
+				agt.InputCh <- input
+
 			case agent.EventError:
 				fmt.Fprintf(os.Stderr, "\n[Error: %s]\n", evt.Error)
 				return fmt.Errorf(evt.Error)

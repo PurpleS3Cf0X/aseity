@@ -89,14 +89,15 @@ type Model struct {
 	modelName     string
 	currentTool   string // track which tool is running for animation
 
-	agent    *agent.Agent
-	prov     provider.Provider
-	toolReg  *tools.Registry
-	eventCh  chan agent.Event
-	ctx      context.Context
-	cancel   context.CancelFunc
-	renderer *glamour.TermRenderer
-	frame    int // animation frame counter
+	agent        *agent.Agent
+	prov         provider.Provider
+	toolReg      *tools.Registry
+	eventCh      chan agent.Event
+	ctx          context.Context
+	cancel       context.CancelFunc
+	renderer     *glamour.TermRenderer
+	frame        int // animation frame counter
+	inputRequest bool
 }
 
 type chatMessage struct {
@@ -229,6 +230,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			text := strings.TrimSpace(m.textarea.Value())
+
+			// Handle Tool Input Request
+			if m.inputRequest {
+				m.inputRequest = false
+				m.textarea.Reset()
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  > [Input Sent]"})
+				m.rebuildView()
+
+				// Send to agent
+				m.agent.InputCh <- text
+
+				// Resume event loop
+				return m, m.waitForEvent()
+			}
+
 			if text == "" {
 				return m, nil
 			}
@@ -290,6 +306,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			m.rebuildView()
 			return m, nil // stop consuming events until user responds
+
+		case agent.EventInputRequest:
+			m.inputRequest = true
+			m.spinnerState = SpinnerTool // Keep spinning
+			m.messages = append(m.messages, chatMessage{
+				role:    "system",
+				content: "  Input required by tool (e.g. password). Type above and press Enter.",
+			})
+			m.rebuildView()
+			// We continue to consume events? No, tool is blocked.
+			return m, nil
 
 		case agent.EventToolResult:
 			// Reset spinner back to thinking state

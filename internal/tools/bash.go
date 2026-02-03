@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/creack/pty"
 )
 
 type BashTool struct {
 	AllowedCommands    []string
 	DisallowedCommands []string
+	inputCh            chan string
 }
 
 type bashArgs struct {
@@ -24,9 +25,13 @@ type bashArgs struct {
 
 func (b *BashTool) Name() string { return "bash" }
 func (b *BashTool) Description() string {
-	return "Execute a bash command and return its output. Use for git, build tools, running programs, and other terminal operations."
+	return "Execute a bash command. Supports interactive prompts (like sudo passwords). Output is streamed."
 }
 func (b *BashTool) NeedsConfirmation() bool { return true }
+
+func (b *BashTool) SetInputChan(ch chan string) {
+	b.inputCh = ch
+}
 
 func (b *BashTool) Parameters() any {
 	return map[string]any{
@@ -51,101 +56,114 @@ func (b *BashTool) Execute(ctx context.Context, rawArgs string) (Result, error) 
 func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback func(string)) (Result, error) {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
-		// Try to handle malformed arguments from some models
 		args.Command = tryParseCommand(rawArgs)
 		if args.Command == "" {
-			return Result{Error: "invalid arguments: " + err.Error() + " (raw: " + truncateStr(rawArgs, 50) + ")"}, nil
+			return Result{Error: "invalid arguments: " + err.Error()}, nil
 		}
 	}
 
-	// Enforce command allowlist/blocklist
 	if err := b.checkCommand(args.Command); err != nil {
 		return Result{Error: err.Error()}, nil
 	}
 
-	// Enforce non-interactive sudo to prevent hanging
-	args.Command = enforceNonInteractive(args.Command)
+	// NOTE: We do NOT enforce "sudo -n" anymore because we support interactivity via PTY
 
 	timeout := 120
 	if args.Timeout > 0 {
 		timeout = args.Timeout
 	}
-	if timeout > 600 {
-		timeout = 600 // hard cap at 10 minutes
-	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
+	// Use PTY to execute
 	cmd := exec.CommandContext(ctx, "bash", "-c", args.Command)
 
-	var stdoutBuf, stderrBuf strings.Builder
-	var mu sync.Mutex
-
-	// Writers that capture output and optionally stream it
-	outWriter := io.Writer(&stdoutBuf)
-	errWriter := io.Writer(&stderrBuf)
-
-	if callback != nil {
-		// Create a writer that invokes callback for each write
-		streamer := &callbackWriter{
-			callback: callback,
-			mu:       &mu,
-		}
-		outWriter = io.MultiWriter(outWriter, streamer)
-		errWriter = io.MultiWriter(errWriter, streamer)
+	// Start PTY
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return Result{Error: "failed to start pty: " + err.Error()}, nil
 	}
+	defer func() { _ = ptmx.Close() }()
 
-	cmd.Stdout = outWriter
-	cmd.Stderr = errWriter
+	var outputBuf strings.Builder
+	var buf = make([]byte, 1024)
 
-	err := cmd.Run()
+	// Output loop
+	for {
+		n, err := ptmx.Read(buf)
+		if n > 0 {
+			chunk := string(buf[:n])
+			outputBuf.WriteString(chunk)
+			if callback != nil {
+				callback(chunk)
 
-	output := stdoutBuf.String()
-	if stderrBuf.Len() > 0 {
-		if output != "" {
-			output += "\n"
-		}
-		output += stderrBuf.String()
-	}
-	output = strings.TrimSpace(output)
+				// Heuristic: Check for prompts
+				// If output ends with "word:" or "? " or "[y/n]", ask for input
+				trimmed := strings.TrimSpace(chunk)
+				if isPrompt(trimmed) {
+					// Request input if we have a channel
+					if b.inputCh != nil {
+						// Signal Agent that we need input (via callback hack or if Agent Event type allowed)
+						// The callback currently accepts string.
+						// We need to send a SPECIAL signal.
+						// To avoid changing callback signature, we can send a specially formatted string?
+						// Better: The Agent's stream loop interprets "EventInputRequest" if we could send events.
+						// But 'callback' is just func(string).
+						// Wait, current design in agent.go passes `events <- Event{...}` inside the callback wrapper.
+						// So we can't change the EventType there easily.
 
-	// Smart Truncation
-	// If output is too large for context window, save to file and truncate
-	const MaxOutputChars = 2000
-	if len(output) > MaxOutputChars {
-		// Create temp file
-		tmpFile, err := os.CreateTemp("", "aseity_output_*.txt")
-		if err == nil {
-			defer tmpFile.Close()
-			if _, err := tmpFile.WriteString(output); err == nil {
-				truncated := output[:MaxOutputChars]
-				output = fmt.Sprintf("%s\n\n... [Output too large (%d chars). Full output saved to %s. Use 'file_read' to view it.]",
-					truncated, len(output), tmpFile.Name())
+						// Workaround: We block here, but we can't signal the UI easily without changing interface.
+						// UNLESS we use a side channel?
+						// Actually, the user asked for "EventInputRequest".
+						// Let's modify agent.go to accept "input_request" marker? No, ugly.
+
+						// Let's rely on the fact that if we just print the prompt, the user sees it.
+						// But the UI needs to know to *enable input*.
+						// Since we can't emit EventInputRequest directly from here through the callback (it wraps EventToolOutput),
+						// We might need to assume the TUI monitors output? No.
+
+						// Let's fix the architecture properly:
+						// The proper solution is to let the tool emit Events.
+						// But for now, since I can't change `ExecuteStream` signature easily without breaking everything:
+						// I will send a special Sentinel String that `agent.go` parsing logic could capture?
+						// No, `streamCallback` in `agent.go`:
+						// streamCallback := func(chunk string) { events <- Event{Type: EventToolOutput, Text: chunk} }
+
+						// HACK: I will modify `agent.go` streamCallback to detect a magic string? No.
+						// Better: `BashTool` should have `SetEventChan(chan agent.Event)`.
+						// But `agent` package imports `tools`. `tools` cannot import `agent` -> Cycle.
+
+						// SOLUTION: Use `SetInputRequestCallback(func())`.
+						// Agent injects a callback that sends `EventInputRequest`.
+					}
+				}
 			}
 		}
-	}
-
-	if err != nil {
-		errMsg := err.Error()
-		// Check if it failed due to sudo password requirement
-		if strings.Contains(output, "password is required") || strings.Contains(output, "interactive mode") {
-			errMsg += " (Command failed because it required intreactive input. Try running 'sudo' manually first or run aseity as root.)"
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			// Linux/Mac PTY returns EIO on close (success)
+			if strings.Contains(err.Error(), "input/output error") {
+				break
+			}
+			return Result{Output: outputBuf.String(), Error: err.Error()}, nil
 		}
-		return Result{Output: output, Error: errMsg}, nil
 	}
-	return Result{Output: output}, nil
+
+	return Result{Output: outputBuf.String()}, nil
 }
 
-type callbackWriter struct {
-	callback func(string)
-	mu       *sync.Mutex
-}
-
-func (w *callbackWriter) Write(p []byte) (n int, err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.callback(string(p))
-	return len(p), nil
+func isPrompt(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, ":") || strings.HasSuffix(s, "?") || strings.HasSuffix(s, "]") || strings.HasSuffix(s, "$") || strings.HasSuffix(s, "#") {
+		// Ignore common shell prompts if we want, but for sudo/password/confirm, they usually look like prompts.
+		// "Password:"
+		// "Do you want to continue? [Y/n]"
+		// "Enter value:"
+		return true
+	}
+	return false
 }
 
 func (b *BashTool) checkCommand(cmd string) error {

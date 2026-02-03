@@ -31,6 +31,7 @@ const (
 	EventToolCall
 	EventToolResult
 	EventToolOutput     // new event for streaming output
+	EventInputRequest   // sent when a tool needs user input
 	EventConfirmRequest // sent when a tool needs user approval
 	EventDone
 	EventError
@@ -41,8 +42,9 @@ type Agent struct {
 	prov      provider.Provider
 	tools     *tools.Registry
 	conv      *Conversation
-	ConfirmCh chan bool // TUI sends true/false here
-	depth     int       // sub-agent nesting depth
+	ConfirmCh chan bool   // TUI sends true/false here
+	InputCh   chan string // TUI sends user input here
+	depth     int         // sub-agent nesting depth
 }
 
 func New(prov provider.Provider, registry *tools.Registry) *Agent {
@@ -53,6 +55,7 @@ func New(prov provider.Provider, registry *tools.Registry) *Agent {
 		tools:     registry,
 		conv:      conv,
 		ConfirmCh: make(chan bool, 1),
+		InputCh:   make(chan string, 1),
 	}
 }
 
@@ -149,6 +152,23 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 					ToolID:   tc.ID,
 					ToolName: tc.Name,
 					Text:     chunk,
+				}
+			}
+
+			// If tool supports interactivity, inject the input channel and request callback
+			if t, ok := a.tools.Get(tc.Name); ok {
+				if interactive, ok := t.(interface {
+					SetInputChan(chan string)
+					SetInputRequestCallback(func())
+				}); ok {
+					interactive.SetInputChan(a.InputCh)
+					interactive.SetInputRequestCallback(func() {
+						events <- Event{
+							Type:     EventInputRequest,
+							ToolName: tc.Name,
+							ToolID:   tc.ID,
+						}
+					})
 				}
 			}
 
