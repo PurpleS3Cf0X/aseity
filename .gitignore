@@ -11,6 +11,7 @@ bin/
 # Editors
 .vscode/
 .idea/
+.claude/
 
 # Testing
 coverage.out
