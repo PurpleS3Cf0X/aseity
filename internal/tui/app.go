@@ -51,41 +51,74 @@ var (
 		FPS:    time.Second / 3,
 	}
 
-	// Fun/Cool Retro Spinners (No Emojis allowed!)
-	FunSpinners = []spinner.Spinner{
-		// 1. The Classic
-		{Frames: []string{"|", "/", "-", "\\"}, FPS: time.Second / 10},
-		// 2. Scanline
-		{Frames: []string{"[     ]", "[=    ]", "[==   ]", "[===  ]", "[ ====]", "[  ===]", "[   ==]", "[    =]", "[     ]"}, FPS: time.Second / 12},
-		// 3. Digital Rain (Braille)
-		{Frames: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}, FPS: time.Second / 10},
-		// 4. Equalizer
-		{Frames: []string{" ", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃", "▂", " "}, FPS: time.Second / 10},
-		// 5. Square Corners
-		{Frames: []string{"▖", "▘", "▝", "▗"}, FPS: time.Second / 6},
-		// 6. Growing Block
-		{Frames: []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏"}, FPS: time.Second / 12},
-		// 7. Arrow Spin
-		{Frames: []string{"←", "↖", "↑", "↗", "→", "↘", "↓", "↙"}, FPS: time.Second / 8},
-		// 8. Bouncing Dot
-		{Frames: []string{"( ●    )", "(  ●   )", "(   ●  )", "(    ● )", "(     ●)", "(    ● )", "(   ●  )", "(  ●   )"}, FPS: time.Second / 10},
-		// 9. Retro Computer
-		{Frames: []string{">_", "> "}, FPS: time.Second / 2},
-		// 10. Starfield
-		{Frames: []string{".  ", " . ", "  ."}, FPS: time.Second / 4},
+	// Fun/Cool Retro Spinners (Strictly ASCII/Block + Colors)
+	FunSpinners = []struct {
+		Spinner spinner.Spinner
+		Color   lipgloss.Style
+	}{
+		// 1. KITT (Knight Rider) - Red/Orange
+		{
+			Spinner: spinner.Spinner{Frames: []string{"[=    ]", "[==   ]", "[===  ]", "[ ====]", "[  ===]", "[   ==]", "[    =]", "[   ==]", "[  ===]", "[ ====]", "[===  ]", "[==   ]"}, FPS: time.Second / 12},
+			Color:   lipgloss.NewStyle().Foreground(Orange),
+		},
+		// 2. Retro Prompt - Green
+		{
+			Spinner: spinner.Spinner{Frames: []string{">_", "> "}, FPS: time.Second / 2},
+			Color:   lipgloss.NewStyle().Foreground(Green),
+		},
+		// 3. Radar scan - Cyan
+		{
+			Spinner: spinner.Spinner{Frames: []string{"(     )", "( =   )", "( ==  )", "( === )", "(  ===)", "(   ==)", "(    =)", "(     )"}, FPS: time.Second / 12},
+			Color:   lipgloss.NewStyle().Foreground(Cyan),
+		},
+		// 4. Loading Bar - Magenta
+		{
+			Spinner: spinner.Spinner{Frames: []string{"[    ]", "[=   ]", "[==  ]", "[=== ]", "[====]", "[ ===]", "[  ==]", "[   =]"}, FPS: time.Second / 10},
+			Color:   lipgloss.NewStyle().Foreground(Magenta),
+		},
+		// 5. Blinking Block - White
+		{
+			Spinner: spinner.Spinner{Frames: []string{"█", " "}, FPS: time.Second / 2},
+			Color:   lipgloss.NewStyle().Foreground(White),
+		},
+		// 6. Classic Pipe - Yellow
+		{
+			Spinner: spinner.Spinner{Frames: []string{"|", "/", "-", "\\"}, FPS: time.Second / 10},
+			Color:   lipgloss.NewStyle().Foreground(SoftYellow),
+		},
+		// 7. Binary - Bright Green
+		{
+			Spinner: spinner.Spinner{Frames: []string{"101010", "010101"}, FPS: time.Second / 4},
+			Color:   lipgloss.NewStyle().Foreground(BrightGreen),
+		},
+		// 8. Ping Pong - Purple
+		{
+			Spinner: spinner.Spinner{Frames: []string{"|  .  |", "| .   |", "|.    |", "| .   |", "|  .  |", "|   . |", "|    .|", "|   . |"}, FPS: time.Second / 8},
+			Color:   lipgloss.NewStyle().Foreground(Purple),
+		},
+		// 9. Hash Noise - Blue
+		{
+			Spinner: spinner.Spinner{Frames: []string{"#", "##", "###", "####", "   #", "  ##", " ###", "####"}, FPS: time.Second / 8},
+			Color:   lipgloss.NewStyle().Foreground(Blue),
+		},
+		// 10. Starfield - LightGray
+		{
+			Spinner: spinner.Spinner{Frames: []string{"+", "x", "*", "x"}, FPS: time.Second / 6},
+			Color:   lipgloss.NewStyle().Foreground(LightGray),
+		},
 	}
 )
 
 // Tool icons for visual distinction
 var toolIcons = map[string]string{
-	"bash":        "⚡",
-	"file_read":   "📄",
-	"file_write":  "✏️",
-	"file_search": "🔍",
-	"web_search":  "🌐",
-	"web_fetch":   "📡",
-	"spawn_agent": "🤖",
-	"list_agents": "📋",
+	"bash":        "CMD",
+	"file_read":   "READ",
+	"file_write":  "EDIT",
+	"file_search": "FIND",
+	"web_search":  "WEB",
+	"web_fetch":   "GET",
+	"spawn_agent": "BOT",
+	"list_agents": "LIST",
 }
 
 type agentEventMsg agent.Event
@@ -124,6 +157,7 @@ type Model struct {
 	frame                  int // animation frame counter
 	inputRequest           bool
 	currentThinkingSpinner spinner.Spinner
+	currentThinkingStyle   lipgloss.Style
 }
 
 type chatMessage struct {
@@ -169,6 +203,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		cancel:                 cancel,
 		renderer:               r,
 		currentThinkingSpinner: ThinkingSpinner,
+		currentThinkingStyle:   SpinnerThinkingStyle,
 	}
 
 	// Add welcome message
@@ -286,8 +321,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking = true
 
 			// Pick a fun random animation for this turn!
-			m.currentThinkingSpinner = FunSpinners[rand.Intn(len(FunSpinners))]
-			m.spinner.Spinner = m.currentThinkingSpinner
+			choice := FunSpinners[rand.Intn(len(FunSpinners))]
+			m.currentThinkingSpinner = choice.Spinner
+			m.currentThinkingStyle = choice.Color
+			m.spinner.Spinner = choice.Spinner
+			m.spinner.Style = choice.Color
 
 			m.rebuildView()
 
@@ -532,7 +570,19 @@ func (m *Model) setSpinnerForTool(toolName string) {
 // resetSpinner returns to thinking state
 func (m *Model) resetSpinner() {
 	m.spinner.Spinner = m.currentThinkingSpinner
-	m.spinner.Style = SpinnerThinkingStyle
+	// We need to store the current thinking color?
+	// For simplicity, we just won't override it here if it's already set by the random picker.
+	// But setSpinnerForTool overrides it.
+	// Let's just default to Purple if we don't remember, OR we should store currentThinkingStyle.
+	// Actually, let's just pick a random one again if we lost it, or better:
+	// We'll trust that m.spinnder.Style was set when we picked the spinner.
+	// But wait, setSpinnerForTool changes m.spinner.Style.
+	// So we DO need to restore it.
+
+	// Quick hack: Just reset to the default ThinkingStyle if we don't save the custom one.
+	// User wants varied colors.
+	// Let's add currentThinkingStyle to Model.
+	m.spinner.Style = m.currentThinkingStyle
 	m.spinnerState = SpinnerThinking
 	m.currentTool = ""
 }
