@@ -10,7 +10,8 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 
 - **Local-first** — Run models on your own machine with Ollama or vLLM
 - **Multi-provider** — Switch between Ollama, OpenAI, Anthropic, Google, or any OpenAI-compatible API
-- **Interactive TUI** — Beautiful terminal interface with syntax highlighting
+- **Interactive TUI** — Beautiful terminal interface with syntax highlighting and animated aesthetics
+- **Interactive Tools** — **New in v1.0.5!** Supports interactive commands like `sudo`, `ssh`, and scripts that ask for passwords or input
 - **Tool use** — Execute shell commands, read/write files, search the web
 - **Sub-agents** — Spawn autonomous agents recursively for complex task decomposition
 - **Streaming Output** — Real-time output feedback for long-running commands
@@ -65,6 +66,15 @@ aseity --model llama3.2
 aseity --provider anthropic --model claude-sonnet-4-20250514
 # Non-interactive mode (auto-approve all tools)
 aseity -y "create a bash file called test.sh"
+
+### Interactive Commands (New in v1.0.5)
+
+Aseity can now handle commands that require user input, such as passwords or confirmation prompts.
+
+```bash
+# This will pause and ask you for the sudo password in the UI
+aseity -y "install nmap using sudo"
+```
 
 ### Headless & Scripting (New in v1.0.4)
 
@@ -227,7 +237,7 @@ Aseity can use these tools to help you:
 
 | Tool | Description | Requires Approval |
 |------|-------------|-------------------|
-| `bash` | Execute shell commands | Yes |
+| `bash` | Execute shell commands (starts PTY, supports interactive prompts) | Yes |
 | `file_read` | Read file contents | No |
 | `file_write` | Create or edit files | Yes |
 | `file_search` | Find files by pattern or content | No |
