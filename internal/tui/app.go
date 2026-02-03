@@ -56,10 +56,10 @@ var (
 		Spinner spinner.Spinner
 		Color   lipgloss.Style
 	}{
-		// 1. KITT (Knight Rider) - Red/Orange
+		// 1. KITT (Knight Rider) - Amber (Matches new theme)
 		{
 			Spinner: spinner.Spinner{Frames: []string{"[=    ]", "[==   ]", "[===  ]", "[ ====]", "[  ===]", "[   ==]", "[    =]", "[   ==]", "[  ===]", "[ ====]", "[===  ]", "[==   ]"}, FPS: time.Second / 12},
-			Color:   lipgloss.NewStyle().Foreground(Orange),
+			Color:   lipgloss.NewStyle().Foreground(Amber),
 		},
 		// 2. Retro Prompt - Green
 		{

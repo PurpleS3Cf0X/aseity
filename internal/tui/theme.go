@@ -22,6 +22,7 @@ var (
 	Purple     = lipgloss.Color("#A855F7") // Thinking/reasoning
 	DimPurple  = lipgloss.Color("#7C3AED") // Thinking text
 	Orange     = lipgloss.Color("#FF9500") // Warnings/confirmations
+	Amber      = lipgloss.Color("#FFB000") // Warm accent (Claude-like)
 	Gold       = lipgloss.Color("#FFD700") // Highlights
 	Blue       = lipgloss.Color("#3B82F6") // Links/info
 	Red        = lipgloss.Color("#EF4444") // Errors
@@ -72,7 +73,7 @@ var (
 			Bold(true)
 
 	CommandStyle = lipgloss.NewStyle().
-			Foreground(SoftYellow).
+			Foreground(Amber).
 			Bold(true)
 
 	ToolResultStyle = lipgloss.NewStyle().
@@ -80,7 +81,7 @@ var (
 
 	// Tool-specific colors
 	BashIconStyle = lipgloss.NewStyle().
-			Foreground(Orange).
+			Foreground(Amber).
 			Bold(true)
 
 	FileIconStyle = lipgloss.NewStyle().
@@ -95,25 +96,25 @@ var (
 			Foreground(Purple).
 			Bold(true)
 
-	// Confirmation dialog — Orange warning style
+	// Confirmation dialog — Amber/Orange warning style
 	ConfirmStyle = lipgloss.NewStyle().
-			Foreground(Orange).
+			Foreground(Amber).
 			Bold(true)
 
 	ConfirmInputStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(Orange).
+				BorderForeground(Amber).
 				Padding(0, 1)
 
 	// Input — Animated border feel
 	InputBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(DarkGreen).
+				BorderForeground(DimGreen).
 				Padding(0, 1)
 
 	InputActiveStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(BrightGreen).
+				BorderForeground(Amber).
 				Padding(0, 1)
 
 	// Spinner — Multiple styles for different states
