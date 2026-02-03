@@ -45,7 +45,11 @@ func (b *BashTool) Parameters() any {
 func (b *BashTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
-		return Result{Error: "invalid arguments: " + err.Error()}, nil
+		// Try to handle malformed arguments from some models
+		args.Command = tryParseCommand(rawArgs)
+		if args.Command == "" {
+			return Result{Error: "invalid arguments: " + err.Error() + " (raw: " + truncateStr(rawArgs, 50) + ")"}, nil
+		}
 	}
 
 	// Enforce command allowlist/blocklist
@@ -127,3 +131,37 @@ func extractBaseCommand(cmd string) string {
 	}
 	return cmd
 }
+
+// tryParseCommand attempts to extract a command from malformed arguments
+// Some models send Python-style lists like ['echo', 'hello'] instead of {"command": "..."}
+func tryParseCommand(rawArgs string) string {
+	rawArgs = strings.TrimSpace(rawArgs)
+
+	// Try to parse as a plain string (some models just send the command directly)
+	if !strings.HasPrefix(rawArgs, "{") && !strings.HasPrefix(rawArgs, "[") {
+		return rawArgs
+	}
+
+	// Try to parse Python-style list: ['echo', 'hello', 'world']
+	if strings.HasPrefix(rawArgs, "[") && strings.HasSuffix(rawArgs, "]") {
+		// Convert Python-style quotes to JSON-style
+		jsonLike := strings.ReplaceAll(rawArgs, "'", "\"")
+		var parts []string
+		if json.Unmarshal([]byte(jsonLike), &parts) == nil && len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	}
+
+	// Try to extract "command" field even with trailing garbage
+	if idx := strings.Index(rawArgs, `"command"`); idx >= 0 {
+		// Find the value
+		rest := rawArgs[idx+9:] // skip `"command"`
+		rest = strings.TrimLeft(rest, `: "`)
+		if endIdx := strings.Index(rest, `"`); endIdx > 0 {
+			return rest[:endIdx]
+		}
+	}
+
+	return ""
+}
+
