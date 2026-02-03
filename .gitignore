@@ -3,3 +3,18 @@ bin/
 *.exe
 .env
 *.log
+
+# Mac
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Testing
+coverage.out
+coverage.html
+
+# Temp
+tmp/
+temp/
