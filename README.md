@@ -18,6 +18,7 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Smart Diff View** — See exactly what changes when files are edited
 - **Thinking visibility** — See the model's reasoning process (for supported models)
 - **Auto-setup** — First-run wizard installs and configures everything
+- **Auto-approve** — Optional `-y` flag to skip permission prompts for trusted sessions
 
 ## Quick Start
 
@@ -60,6 +61,8 @@ aseity --model llama3.2
 
 # Use a different provider
 aseity --provider anthropic --model claude-sonnet-4-20250514
+# Non-interactive mode (auto-approve all tools)
+aseity -y "create a bash file called test.sh"
 ```
 
 ### In the Chat
