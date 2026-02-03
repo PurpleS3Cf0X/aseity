@@ -25,7 +25,7 @@ type spawnAgentArgs struct {
 	Task string `json:"task"`
 }
 
-func (s *SpawnAgentTool) Name() string        { return "spawn_agent" }
+func (s *SpawnAgentTool) Name() string            { return "spawn_agent" }
 func (s *SpawnAgentTool) NeedsConfirmation() bool { return true }
 func (s *SpawnAgentTool) Description() string {
 	return "Spawn a sub-agent to handle a complex task autonomously. The sub-agent has access to all tools and will return its output when done. Use for parallel or delegated work."
@@ -100,7 +100,7 @@ func NewListAgentsTool(spawner types.AgentSpawner) *ListAgentsTool {
 	return &ListAgentsTool{spawner: spawner}
 }
 
-func (l *ListAgentsTool) Name() string        { return "list_agents" }
+func (l *ListAgentsTool) Name() string            { return "list_agents" }
 func (l *ListAgentsTool) NeedsConfirmation() bool { return false }
 func (l *ListAgentsTool) Description() string {
 	return "List all sub-agents and their current status (running, done, failed, cancelled)."

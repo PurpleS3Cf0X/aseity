@@ -19,15 +19,15 @@ var (
 	White       = lipgloss.Color("#FFFFFF")
 
 	// Accent colors — Claude Code inspired
-	Purple       = lipgloss.Color("#A855F7") // Thinking/reasoning
-	DimPurple    = lipgloss.Color("#7C3AED") // Thinking text
-	Orange       = lipgloss.Color("#FF9500") // Warnings/confirmations
-	Gold         = lipgloss.Color("#FFD700") // Highlights
-	Blue         = lipgloss.Color("#3B82F6") // Links/info
-	Red          = lipgloss.Color("#EF4444") // Errors
-	Magenta      = lipgloss.Color("#EC4899") // Special actions
-	SoftYellow   = lipgloss.Color("#FBBF24") // Soft highlights
-	MintGreen    = lipgloss.Color("#34D399") // Success indicators
+	Purple     = lipgloss.Color("#A855F7") // Thinking/reasoning
+	DimPurple  = lipgloss.Color("#7C3AED") // Thinking text
+	Orange     = lipgloss.Color("#FF9500") // Warnings/confirmations
+	Gold       = lipgloss.Color("#FFD700") // Highlights
+	Blue       = lipgloss.Color("#3B82F6") // Links/info
+	Red        = lipgloss.Color("#EF4444") // Errors
+	Magenta    = lipgloss.Color("#EC4899") // Special actions
+	SoftYellow = lipgloss.Color("#FBBF24") // Soft highlights
+	MintGreen  = lipgloss.Color("#34D399") // Success indicators
 
 	// Status bar — Gradient effect
 	StatusBarStyle = lipgloss.NewStyle().

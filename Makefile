@@ -5,6 +5,7 @@ LDFLAGS  = -s -w -X github.com/jeanpaul/aseity/pkg/version.Version=$(VERSION) -X
 .PHONY: build install clean docker docker-up docker-down deps fmt lint release
 
 build:
+	@echo "Building with version=$(VERSION) commit=$(COMMIT)..."
 	go build -ldflags="$(LDFLAGS)" -o bin/aseity ./cmd/aseity
 
 install:

@@ -3,47 +3,28 @@
 ## Critical UX Issues
 
 ### 1. Unknown Commands Silently Ignored
-**Problem:** Running `aseity unknowncommand` doesn't show an error - it tries to launch the TUI instead.
-```bash
-$ ./bin/aseity unknowncommand
-# Launches TUI instead of showing "unknown command" error
-```
-**Fix:** Add validation for unknown subcommands in main.go
+**[RESOLVED]**
+The `main.go` file now handles unknown subcommands in the `default` case of the switch statement (lines 82-85), printing an error and showing help.
 
 ### 2. Poor Help Output
-**Problem:** `--help` output is minimal and doesn't list subcommands.
-```
-Current output:
-  -model string
-  -provider string
-  -version
-
-Missing:
-  - List of subcommands (models, pull, search, doctor, setup, providers, remove)
-  - Examples
-  - Description
-```
-**Fix:** Implement custom help with subcommand documentation
+**[RESOLVED]**
+A comprehensive `showHelp` function has been implemented (lines 455-502 of `main.go`) which lists all subcommands, flags, and examples.
 
 ### 3. Version Shows "dev (unknown)"
 **Problem:** When built with `go build ./...`, version info is not embedded.
 **Fix:** Build with `make build` or document the required ldflags
 
 ### 4. Model Auto-Download Without Consent
-**Problem:** In main flow, if model not found it pulls automatically without asking.
-```
-  ✗ model "deepseek-r1" not found
-  Pulling model deepseek-r1...    <- No "Do you want to download?" prompt
-```
-**Fix:** Add confirmation prompt before auto-pulling in main.go (setup wizard already has this)
+**[RESOLVED]**
+The `main.go` file now prompts the user before pulling a model: `Download +modelName+ now? [Y/n]` (lines 137-147).
 
 ---
 
 ## UX Improvements Needed
 
 ### 5. No Welcome Message in TUI
-**Problem:** When TUI launches, user sees blank viewport with input box. No hints on how to use it.
-**Fix:** Show welcome message with example prompts and quick command reference
+**[RESOLVED]**
+The `NewModel` function in `internal/tui/app.go` now initializes `m.messages` with a welcome message (lines 137-141).
 
 ### 6. No Typing/Waiting Indicator Before First Token
 **Problem:** After sending a message, user waits with no feedback until first token arrives.
@@ -66,8 +47,8 @@ Missing:
 **Fix:** Show "[truncated - full output sent to model]" clearly
 
 ### 10. Subcommands Not Listed in Help
-**Problem:** Users won't discover subcommands like `models`, `pull`, `search`, `doctor`, `setup`.
-**Fix:** Add comprehensive help system
+**[RESOLVED]**
+See item #2.
 
 ---
 

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jeanpaul/aseity/internal/agent"
@@ -88,12 +89,13 @@ type Model struct {
 	modelName     string
 	currentTool   string // track which tool is running for animation
 
-	agent   *agent.Agent
-	prov    provider.Provider
-	toolReg *tools.Registry
-	eventCh chan agent.Event
-	ctx     context.Context
-	cancel  context.CancelFunc
+	agent    *agent.Agent
+	prov     provider.Provider
+	toolReg  *tools.Registry
+	eventCh  chan agent.Event
+	ctx      context.Context
+	cancel   context.CancelFunc
+	renderer *glamour.TermRenderer
 }
 
 type chatMessage struct {
@@ -120,6 +122,11 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	ctx, cancel := context.WithCancel(context.Background())
 	ag := agent.New(prov, toolReg)
 
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+
 	m := Model{
 		viewport:     vp,
 		textarea:     ta,
@@ -132,6 +139,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		agent:        ag,
 		ctx:          ctx,
 		cancel:       cancel,
+		renderer:     r,
 	}
 
 	// Add welcome message
@@ -144,7 +152,10 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.spinner.Tick)
+	return tea.Batch(
+		textarea.Blink,
+		m.spinner.Tick,
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -181,7 +192,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Scroll viewport with Ctrl+Up/Down or PgUp/PgDown (when not typing)
 		switch msg.Type {
+		case tea.KeyPgUp:
+			m.viewport.HalfViewUp()
+			return m, nil
+		case tea.KeyPgDown:
+			m.viewport.HalfViewDown()
+			return m, nil
 		case tea.KeyEsc:
 			// Save session on exit
 			m.agent.Conversation().Save()
@@ -253,6 +271,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content: formatToolCallDisplay(evt.ToolName, evt.ToolArgs),
 			})
 
+		case agent.EventToolOutput:
+			// Append output to the last message if it's a tool execution display
+			if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "tool" {
+				m.messages[len(m.messages)-1].content += evt.Text
+			} else {
+				// Should not happen, but safe fallback
+				m.messages = append(m.messages, chatMessage{role: "tool", content: evt.Text})
+			}
+
 		case agent.EventConfirmRequest:
 			m.confirming = true
 			m.confirmEvt = &evt
@@ -299,6 +326,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
+
+	case tea.MouseMsg:
+		// Handle mouse scroll
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.viewport.LineUp(3)
+		case tea.MouseButtonWheelDown:
+			m.viewport.LineDown(3)
+		}
 	}
 
 	var cmd tea.Cmd
@@ -320,12 +356,21 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 		m.messages = append(m.messages, chatMessage{
 			role: "system",
 			content: `  Available commands:
-    /help     — show this help
-    /clear    — clear conversation history
-    /compact  — compress conversation to save context
-    /save     — export conversation to markdown file
-    /tokens   — show estimated token usage
-    /quit     — exit aseity`,
+    /help        — show this help
+    /clear       — clear conversation history
+    /compact     — compress conversation to save context
+    /save [path] — export conversation to markdown file
+    /tokens      — show estimated token usage
+    /model       — show current model
+    /quit        — exit aseity
+
+  Keyboard shortcuts:
+    Enter        — send message
+    Alt+Enter    — new line
+    Ctrl+T       — toggle thinking visibility
+    Ctrl+C       — cancel/quit
+    PgUp/PgDown  — scroll conversation
+    Esc          — quit`,
 		})
 
 	case "/clear":
@@ -359,6 +404,12 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 		m.messages = append(m.messages, chatMessage{
 			role:    "system",
 			content: fmt.Sprintf("  ~%dk tokens, %d messages", tokens/1000, msgCount),
+		})
+
+	case "/model":
+		m.messages = append(m.messages, chatMessage{
+			role:    "system",
+			content: fmt.Sprintf("  Provider: %s\n  Model: %s", m.providerName, m.modelName),
 		})
 
 	case "/quit":
@@ -544,8 +595,21 @@ func (m *Model) rebuildView() {
 			}
 		case "assistant":
 			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
-			for _, line := range strings.Split(msg.content, "\n") {
-				sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
+			// Render markdown with glamour
+			rendered, err := m.renderer.Render(msg.content)
+			if err != nil {
+				// Fallback to plain text
+				for _, line := range strings.Split(msg.content, "\n") {
+					sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
+				}
+			} else {
+				// Indent the rendered markdown slightly
+				lines := strings.Split(rendered, "\n")
+				for _, line := range lines {
+					if line != "" {
+						sb.WriteString("  " + line + "\n")
+					}
+				}
 			}
 			sb.WriteString("\n")
 		case "tool":

@@ -3,9 +3,14 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 )
 
 type FileWriteTool struct{}
@@ -17,7 +22,7 @@ type fileWriteArgs struct {
 	NewString string `json:"new_string,omitempty"`
 }
 
-func (f *FileWriteTool) Name() string        { return "file_write" }
+func (f *FileWriteTool) Name() string { return "file_write" }
 func (f *FileWriteTool) Description() string {
 	return "Write or edit a file. Provide 'content' to overwrite the entire file, or 'old_string' and 'new_string' to make a targeted replacement."
 }
@@ -56,10 +61,21 @@ func (f *FileWriteTool) Execute(_ context.Context, rawArgs string) (Result, erro
 			return Result{Error: "old_string matches multiple locations; provide more context to make it unique"}, nil
 		}
 		content = strings.Replace(content, args.OldString, args.NewString, 1)
+
+		// Calculate diff
+		edits := myers.ComputeEdits(span.URIFromPath(args.Path), string(data), content)
+		diff := fmt.Sprint(gotextdiff.ToUnified(args.Path, args.Path, string(data), edits))
+
 		if err := os.WriteFile(args.Path, []byte(content), 0644); err != nil {
 			return Result{Error: err.Error()}, nil
 		}
-		return Result{Output: "File edited successfully"}, nil
+		return Result{Output: fmt.Sprintf("File edited successfully. Changes:\n\n```diff\n%s\n```", diff)}, nil
+	}
+
+	// For full overwrite, check if file exists for diff
+	var oldContent string
+	if data, err := os.ReadFile(args.Path); err == nil {
+		oldContent = string(data)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(args.Path), 0755); err != nil {
@@ -68,5 +84,10 @@ func (f *FileWriteTool) Execute(_ context.Context, rawArgs string) (Result, erro
 	if err := os.WriteFile(args.Path, []byte(args.Content), 0644); err != nil {
 		return Result{Error: err.Error()}, nil
 	}
-	return Result{Output: "File written successfully"}, nil
+
+	// Calculate diff
+	edits := myers.ComputeEdits(span.URIFromPath(args.Path), oldContent, args.Content)
+	diff := fmt.Sprint(gotextdiff.ToUnified(args.Path, args.Path, oldContent, edits))
+
+	return Result{Output: fmt.Sprintf("File written successfully. Changes:\n\n```diff\n%s\n```", diff)}, nil
 }

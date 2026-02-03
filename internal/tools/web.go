@@ -21,7 +21,7 @@ type webSearchArgs struct {
 	NumResults int    `json:"num_results,omitempty"`
 }
 
-func (w *WebSearchTool) Name() string        { return "web_search" }
+func (w *WebSearchTool) Name() string            { return "web_search" }
 func (w *WebSearchTool) NeedsConfirmation() bool { return false }
 func (w *WebSearchTool) Description() string {
 	return "Search the web using DuckDuckGo. Returns titles, URLs, and snippets for each result."
@@ -159,7 +159,7 @@ type webFetchArgs struct {
 	URL string `json:"url"`
 }
 
-func (w *WebFetchTool) Name() string        { return "web_fetch" }
+func (w *WebFetchTool) Name() string            { return "web_fetch" }
 func (w *WebFetchTool) NeedsConfirmation() bool { return false }
 func (w *WebFetchTool) Description() string {
 	return "Fetch a URL and return its content as readable text. HTML is converted to plain text."

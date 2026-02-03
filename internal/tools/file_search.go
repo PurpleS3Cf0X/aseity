@@ -17,7 +17,7 @@ type fileSearchArgs struct {
 	Grep    string `json:"grep,omitempty"`
 }
 
-func (f *FileSearchTool) Name() string        { return "file_search" }
+func (f *FileSearchTool) Name() string { return "file_search" }
 func (f *FileSearchTool) Description() string {
 	return "Search for files by glob pattern or search file contents with a text query. Provide 'pattern' for glob matching or 'grep' for content search."
 }

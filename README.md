@@ -13,6 +13,9 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Interactive TUI** — Beautiful terminal interface with syntax highlighting
 - **Tool use** — Execute shell commands, read/write files, search the web
 - **Sub-agents** — Spawn autonomous agents for parallel tasks
+- **Streaming Output** — Real-time output feedback for long-running commands
+- **Mac Compatible** — Docker setup is now optimized for Apple Silicon
+- **Smart Diff View** — See exactly what changes when files are edited
 - **Thinking visibility** — See the model's reasoning process (for supported models)
 - **Auto-setup** — First-run wizard installs and configures everything
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -41,8 +43,11 @@ func (b *BashTool) Parameters() any {
 		"required": []string{"command"},
 	}
 }
-
 func (b *BashTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
+	return b.ExecuteStream(ctx, rawArgs, nil)
+}
+
+func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback func(string)) (Result, error) {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
 		// Try to handle malformed arguments from some models
@@ -68,8 +73,37 @@ func (b *BashTool) Execute(ctx context.Context, rawArgs string) (Result, error) 
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", args.Command)
-	out, err := cmd.CombinedOutput()
-	output := strings.TrimSpace(string(out))
+
+	var stdoutBuf, stderrBuf strings.Builder
+	var mu sync.Mutex
+
+	// Writers that capture output and optionally stream it
+	outWriter := io.Writer(&stdoutBuf)
+	errWriter := io.Writer(&stderrBuf)
+
+	if callback != nil {
+		// Create a writer that invokes callback for each write
+		streamer := &callbackWriter{
+			callback: callback,
+			mu:       &mu,
+		}
+		outWriter = io.MultiWriter(outWriter, streamer)
+		errWriter = io.MultiWriter(errWriter, streamer)
+	}
+
+	cmd.Stdout = outWriter
+	cmd.Stderr = errWriter
+
+	err := cmd.Run()
+
+	output := stdoutBuf.String()
+	if stderrBuf.Len() > 0 {
+		if output != "" {
+			output += "\n"
+		}
+		output += stderrBuf.String()
+	}
+	output = strings.TrimSpace(output)
 
 	// Truncate very large outputs
 	if len(output) > 50000 {
@@ -80,6 +114,18 @@ func (b *BashTool) Execute(ctx context.Context, rawArgs string) (Result, error) 
 		return Result{Output: output, Error: err.Error()}, nil
 	}
 	return Result{Output: output}, nil
+}
+
+type callbackWriter struct {
+	callback func(string)
+	mu       *sync.Mutex
+}
+
+func (w *callbackWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.callback(string(p))
+	return len(p), nil
 }
 
 func (b *BashTool) checkCommand(cmd string) error {
@@ -164,4 +210,3 @@ func tryParseCommand(rawArgs string) string {
 
 	return ""
 }
-

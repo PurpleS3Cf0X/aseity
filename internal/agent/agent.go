@@ -30,6 +30,7 @@ const (
 	EventThinking
 	EventToolCall
 	EventToolResult
+	EventToolOutput     // new event for streaming output
 	EventConfirmRequest // sent when a tool needs user approval
 	EventDone
 	EventError
@@ -41,7 +42,7 @@ type Agent struct {
 	tools     *tools.Registry
 	conv      *Conversation
 	ConfirmCh chan bool // TUI sends true/false here
-	depth     int      // sub-agent nesting depth
+	depth     int       // sub-agent nesting depth
 }
 
 func New(prov provider.Provider, registry *tools.Registry) *Agent {
@@ -135,7 +136,16 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 			}
 
 			// Execute
-			res, err := a.tools.Execute(ctx, tc.Name, tc.Args)
+			streamCallback := func(chunk string) {
+				events <- Event{
+					Type:     EventToolOutput,
+					ToolID:   tc.ID,
+					ToolName: tc.Name,
+					Text:     chunk,
+				}
+			}
+
+			res, err := a.tools.Execute(ctx, tc.Name, tc.Args, streamCallback)
 			if err != nil {
 				errMsg := fmt.Sprintf("tool execution error: %s", err.Error())
 				a.conv.AddToolResult(tc.ID, errMsg)

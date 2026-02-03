@@ -35,12 +35,12 @@ func (a *AnthropicProvider) Models(_ context.Context) ([]string, error) {
 }
 
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMsg     `json:"messages"`
-	Stream    bool               `json:"stream"`
-	Tools     []anthropicTool    `json:"tools,omitempty"`
+	Model     string          `json:"model"`
+	MaxTokens int             `json:"max_tokens"`
+	System    string          `json:"system,omitempty"`
+	Messages  []anthropicMsg  `json:"messages"`
+	Stream    bool            `json:"stream"`
+	Tools     []anthropicTool `json:"tools,omitempty"`
 }
 
 type anthropicMsg struct {
@@ -55,9 +55,9 @@ type anthropicTool struct {
 }
 
 type anthropicEvent struct {
-	Type  string          `json:"type"`
-	Delta json.RawMessage `json:"delta,omitempty"`
-	Index int             `json:"index,omitempty"`
+	Type         string          `json:"type"`
+	Delta        json.RawMessage `json:"delta,omitempty"`
+	Index        int             `json:"index,omitempty"`
 	ContentBlock *struct {
 		Type string `json:"type"`
 		ID   string `json:"id,omitempty"`

@@ -60,17 +60,17 @@ func (o *OpenAIProvider) Models(ctx context.Context) ([]string, error) {
 }
 
 type oaiRequest struct {
-	Model    string        `json:"model"`
-	Messages []oaiMessage  `json:"messages"`
-	Stream   bool          `json:"stream"`
-	Tools    []oaiTool     `json:"tools,omitempty"`
+	Model    string       `json:"model"`
+	Messages []oaiMessage `json:"messages"`
+	Stream   bool         `json:"stream"`
+	Tools    []oaiTool    `json:"tools,omitempty"`
 }
 
 type oaiMessage struct {
-	Role       string          `json:"role"`
-	Content    string          `json:"content,omitempty"`
-	ToolCalls  []oaiToolCall   `json:"tool_calls,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Role       string        `json:"role"`
+	Content    string        `json:"content,omitempty"`
+	ToolCalls  []oaiToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
 }
 
 type oaiTool struct {
@@ -85,7 +85,7 @@ type oaiFunction struct {
 }
 
 type oaiToolCall struct {
-	Index    *int `json:"index,omitempty"`
+	Index    *int            `json:"index,omitempty"`
 	ID       string          `json:"id,omitempty"`
 	Type     string          `json:"type"`
 	Function oaiToolCallFunc `json:"function"`
@@ -112,8 +112,8 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 		om := oaiMessage{Role: string(m.Role), Content: m.Content, ToolCallID: m.ToolCallID}
 		for _, tc := range m.ToolCalls {
 			om.ToolCalls = append(om.ToolCalls, oaiToolCall{
-				ID:   tc.ID,
-				Type: "function",
+				ID:       tc.ID,
+				Type:     "function",
 				Function: oaiToolCallFunc{Name: tc.Name, Arguments: tc.Args},
 			})
 		}
@@ -123,7 +123,7 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 	var oaiTools []oaiTool
 	for _, t := range tools {
 		oaiTools = append(oaiTools, oaiTool{
-			Type: "function",
+			Type:     "function",
 			Function: oaiFunction{Name: t.Name, Description: t.Description, Parameters: t.Parameters},
 		})
 	}

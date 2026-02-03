@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -225,8 +227,12 @@ func cmdPull(ref string) {
 		ollamaURL = strings.TrimSuffix(p.BaseURL, "/v1")
 	}
 	mgr := model.NewManager(ollamaURL, os.Getenv("HF_TOKEN"))
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	fmt.Printf("%s Pulling %s...\n", tui.SpinnerStyle.Render("●"), ref)
-	err := mgr.Pull(context.Background(), ref, func(p model.PullProgress) {
+	err := mgr.Pull(ctx, ref, func(p model.PullProgress) {
 		if p.Percent > 0 {
 			bar := int(p.Percent / 2)
 			fmt.Printf("\r  %s [%s%s] %.0f%%",
@@ -419,11 +425,32 @@ func launchTUI(cfg *config.Config, provName, modelName string) {
 	}()
 
 	m := tui.NewModel(prov, toolReg, provName, modelName)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Create program with appropriate options based on terminal capabilities
+	var opts []tea.ProgramOption
+
+	// Check if we have a proper terminal
+	if isTerminal() {
+		opts = append(opts, tea.WithAltScreen())
+	}
+
+	// Always try to use mouse support if available
+	opts = append(opts, tea.WithMouseCellMotion())
+
+	p := tea.NewProgram(m, opts...)
 
 	if _, err := p.Run(); err != nil {
 		fatal("TUI error: %s", err)
 	}
+}
+
+// isTerminal checks if stdin is a terminal
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func fatal(format string, args ...any) {

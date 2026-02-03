@@ -41,10 +41,16 @@ func (r *Registry) ToolDefs() []provider.ToolDef {
 	return defs
 }
 
-func (r *Registry) Execute(ctx context.Context, name, args string) (Result, error) {
+func (r *Registry) Execute(ctx context.Context, name, args string, callback func(string)) (Result, error) {
 	t, ok := r.tools[name]
 	if !ok {
 		return Result{Error: fmt.Sprintf("unknown tool: %s", name)}, nil
+	}
+
+	if callback != nil {
+		if s, ok := t.(Streamer); ok {
+			return s.ExecuteStream(ctx, args, callback)
+		}
 	}
 	return t.Execute(ctx, args)
 }

@@ -29,10 +29,10 @@ services:
     deploy:
       resources:
         reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+          # devices:
+          #   - driver: nvidia
+          #     count: all
+          #     capabilities: [gpu]
     networks:
       - aseity-net
 
@@ -49,10 +49,10 @@ services:
     deploy:
       resources:
         reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+          # devices:
+          #   - driver: nvidia
+          #     count: all
+          #     capabilities: [gpu]
     networks:
       - aseity-net
 

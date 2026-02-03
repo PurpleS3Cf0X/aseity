@@ -12,11 +12,11 @@ import (
 )
 
 type Conversation struct {
-	messages     []provider.Message
-	maxTokens    int // approximate context window limit
-	totalTokens  int // running estimate
-	sessionID    string
-	sessionDir   string
+	messages    []provider.Message
+	maxTokens   int // approximate context window limit
+	totalTokens int // running estimate
+	sessionID   string
+	sessionDir  string
 }
 
 func NewConversation() *Conversation {
