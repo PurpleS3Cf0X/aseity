@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -16,13 +17,68 @@ import (
 	"github.com/jeanpaul/aseity/internal/tools"
 )
 
+// Custom spinner frames for different states
+var (
+	// Thinking spinner — Braille dots animation (smooth)
+	ThinkingSpinner = spinner.Spinner{
+		Frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		FPS:    time.Second / 12,
+	}
+
+	// Tool execution spinner — Bouncing dots
+	ToolSpinner = spinner.Spinner{
+		Frames: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"},
+		FPS:    time.Second / 10,
+	}
+
+	// Processing spinner — Pulse effect
+	ProcessingSpinner = spinner.Spinner{
+		Frames: []string{"●", "◐", "◑", "◒", "◓", "◔", "◕", "◖", "◗", "◘"},
+		FPS:    time.Second / 8,
+	}
+
+	// Waiting spinner — Subtle blink
+	WaitingSpinner = spinner.Spinner{
+		Frames: []string{"◇", "◈", "◆", "◈"},
+		FPS:    time.Second / 4,
+	}
+
+	// Network spinner — Globe animation
+	NetworkSpinner = spinner.Spinner{
+		Frames: []string{"🌍", "🌎", "🌏"},
+		FPS:    time.Second / 3,
+	}
+)
+
+// Tool icons for visual distinction
+var toolIcons = map[string]string{
+	"bash":        "⚡",
+	"file_read":   "📄",
+	"file_write":  "✏️",
+	"file_search": "🔍",
+	"web_search":  "🌐",
+	"web_fetch":   "📡",
+	"spawn_agent": "🤖",
+	"list_agents": "📋",
+}
+
 type agentEventMsg agent.Event
+
+type SpinnerState int
+
+const (
+	SpinnerIdle SpinnerState = iota
+	SpinnerThinking
+	SpinnerTool
+	SpinnerNetwork
+)
 
 type Model struct {
 	width, height int
 	viewport      viewport.Model
 	textarea      textarea.Model
 	spinner       spinner.Model
+	spinnerState  SpinnerState
 	messages      []chatMessage
 	thinking      bool
 	showThinking  bool
@@ -30,6 +86,7 @@ type Model struct {
 	confirmEvt    *agent.Event
 	providerName  string
 	modelName     string
+	currentTool   string // track which tool is running for animation
 
 	agent   *agent.Agent
 	prov    provider.Provider
@@ -56,8 +113,8 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	ta.BlurredStyle.Base = lipgloss.NewStyle().Foreground(DarkGreen)
 
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = SpinnerStyle
+	sp.Spinner = ThinkingSpinner
+	sp.Style = SpinnerThinkingStyle
 
 	vp := viewport.New(80, 20)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -180,6 +237,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages[len(m.messages)-1].content += evt.Text
 
 		case agent.EventToolCall:
+			m.currentTool = evt.ToolName
+			// Switch spinner based on tool type
+			m.setSpinnerForTool(evt.ToolName)
 			m.messages = append(m.messages, chatMessage{
 				role:    "tool",
 				content: formatToolCallDisplay(evt.ToolName, evt.ToolArgs),
@@ -196,6 +256,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stop consuming events until user responds
 
 		case agent.EventToolResult:
+			// Reset spinner back to thinking state
+			m.resetSpinner()
 			if evt.Result != "" {
 				result := evt.Result
 				if len(result) > 500 {
@@ -317,31 +379,127 @@ func (m *Model) waitForEvent() tea.Cmd {
 	}
 }
 
+// setSpinnerForTool changes the spinner animation based on tool type
+func (m *Model) setSpinnerForTool(toolName string) {
+	switch toolName {
+	case "web_search", "web_fetch":
+		m.spinner.Spinner = NetworkSpinner
+		m.spinner.Style = WebIconStyle
+		m.spinnerState = SpinnerNetwork
+	case "bash":
+		m.spinner.Spinner = ToolSpinner
+		m.spinner.Style = BashIconStyle
+		m.spinnerState = SpinnerTool
+	case "file_read", "file_write", "file_search":
+		m.spinner.Spinner = ProcessingSpinner
+		m.spinner.Style = FileIconStyle
+		m.spinnerState = SpinnerTool
+	case "spawn_agent", "list_agents":
+		m.spinner.Spinner = ThinkingSpinner
+		m.spinner.Style = AgentIconStyle
+		m.spinnerState = SpinnerTool
+	default:
+		m.spinner.Spinner = ToolSpinner
+		m.spinner.Style = SpinnerToolStyle
+		m.spinnerState = SpinnerTool
+	}
+}
+
+// resetSpinner returns to thinking state
+func (m *Model) resetSpinner() {
+	m.spinner.Spinner = ThinkingSpinner
+	m.spinner.Style = SpinnerThinkingStyle
+	m.spinnerState = SpinnerThinking
+	m.currentTool = ""
+}
+
+// getAnimatedStatus returns a contextual status message
+func (m *Model) getAnimatedStatus() string {
+	if m.currentTool != "" {
+		switch m.currentTool {
+		case "bash":
+			return "Executing command..."
+		case "file_read":
+			return "Reading file..."
+		case "file_write":
+			return "Writing file..."
+		case "file_search":
+			return "Searching files..."
+		case "web_search":
+			return "Searching the web..."
+		case "web_fetch":
+			return "Fetching page..."
+		case "spawn_agent":
+			return "Spawning sub-agent..."
+		case "list_agents":
+			return "Listing agents..."
+		default:
+			return "Running " + m.currentTool + "..."
+		}
+	}
+	return "Thinking..."
+}
+
 func formatToolCallDisplay(name, args string) string {
-	icon := ToolCallStyle.Render("●")
+	icon := toolIcons[name]
+	if icon == "" {
+		icon = "●"
+	}
+
 	switch name {
 	case "bash":
 		return fmt.Sprintf("  %s %s\n  %s",
-			icon,
+			BashIconStyle.Render(icon),
 			ToolLabelStyle.Render("bash"),
 			CommandStyle.Render("$ "+args),
 		)
 	case "file_read":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("read"), args)
+		return fmt.Sprintf("  %s %s %s",
+			FileIconStyle.Render(icon),
+			ToolLabelStyle.Render("read"),
+			InfoStyle.Render(args),
+		)
 	case "file_write":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("write"), args)
+		return fmt.Sprintf("  %s %s %s",
+			FileIconStyle.Render(icon),
+			ToolLabelStyle.Render("write"),
+			InfoStyle.Render(args),
+		)
 	case "file_search":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("search"), args)
+		return fmt.Sprintf("  %s %s %s",
+			FileIconStyle.Render(icon),
+			ToolLabelStyle.Render("search"),
+			InfoStyle.Render(args),
+		)
 	case "web_search":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("web search"), args)
+		return fmt.Sprintf("  %s %s %s",
+			WebIconStyle.Render(icon),
+			ToolLabelStyle.Render("web search"),
+			InfoStyle.Render(args),
+		)
 	case "web_fetch":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("fetch"), args)
+		return fmt.Sprintf("  %s %s %s",
+			WebIconStyle.Render(icon),
+			ToolLabelStyle.Render("fetch"),
+			InfoStyle.Render(truncate(args, 60)),
+		)
 	case "spawn_agent":
-		return fmt.Sprintf("  %s %s %s", icon, ToolLabelStyle.Render("spawn agent"), truncate(args, 60))
+		return fmt.Sprintf("  %s %s %s",
+			AgentIconStyle.Render(icon),
+			ToolLabelStyle.Render("spawn agent"),
+			InfoStyle.Render(truncate(args, 60)),
+		)
 	case "list_agents":
-		return fmt.Sprintf("  %s %s", icon, ToolLabelStyle.Render("list agents"))
+		return fmt.Sprintf("  %s %s",
+			AgentIconStyle.Render(icon),
+			ToolLabelStyle.Render("list agents"),
+		)
 	default:
-		return fmt.Sprintf("  %s %s(%s)", icon, name, truncate(args, 60))
+		return fmt.Sprintf("  %s %s %s",
+			ToolCallStyle.Render("●"),
+			ToolLabelStyle.Render(name),
+			InfoStyle.Render(truncate(args, 60)),
+		)
 	}
 }
 
@@ -354,23 +512,27 @@ func (m *Model) rebuildView() {
 			sb.WriteString(UserMsgStyle.Render("  "+msg.content) + "\n\n")
 		case "thinking":
 			if m.showThinking && msg.content != "" {
-				sb.WriteString(ThinkingLabelStyle.Render("  ▸ Thinking") + "\n")
+				sb.WriteString(ThinkingLabelStyle.Render("  💭 Reasoning") + "\n")
 				lines := strings.Split(msg.content, "\n")
 				maxLines := 20
 				if len(lines) > maxLines {
 					for _, line := range lines[:maxLines] {
-						sb.WriteString(ThinkingStyle.Render("    "+line) + "\n")
+						sb.WriteString(ThinkingStyle.Render("    │ "+line) + "\n")
 					}
-					sb.WriteString(ThinkingStyle.Render(fmt.Sprintf("    ... (%d more lines)", len(lines)-maxLines)) + "\n")
+					sb.WriteString(ThinkingStyle.Render(fmt.Sprintf("    └─ ... (%d more lines)", len(lines)-maxLines)) + "\n")
 				} else {
-					for _, line := range lines {
-						sb.WriteString(ThinkingStyle.Render("    "+line) + "\n")
+					for i, line := range lines {
+						prefix := "    │ "
+						if i == len(lines)-1 {
+							prefix = "    └─"
+						}
+						sb.WriteString(ThinkingStyle.Render(prefix+line) + "\n")
 					}
 				}
 				sb.WriteString("\n")
 			} else if !m.showThinking && msg.content != "" {
 				lines := strings.Count(msg.content, "\n") + 1
-				sb.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("  ▸ Thinking (%d lines, Ctrl+T to expand)", lines)) + "\n\n")
+				sb.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("  💭 Reasoning (%d lines) ", lines)) + HelpStyle.Render("[Ctrl+T to expand]") + "\n\n")
 			}
 		case "assistant":
 			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
@@ -386,21 +548,32 @@ func (m *Model) rebuildView() {
 			}
 			sb.WriteString("\n")
 		case "confirm_prompt":
-			sb.WriteString(ConfirmStyle.Render(msg.content) + "\n")
+			sb.WriteString(WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n")
 		case "confirm":
-			sb.WriteString(BannerStyle.Render(msg.content+" ✓") + "\n\n")
+			sb.WriteString(SuccessStyle.Render("  ✓"+msg.content) + "\n\n")
 		case "confirm_deny":
-			sb.WriteString(ErrorStyle.Render(msg.content+" ✗") + "\n\n")
+			sb.WriteString(ErrorStyle.Render("  ✗"+msg.content) + "\n\n")
 		case "error":
-			sb.WriteString(ErrorStyle.Render("  Error: "+msg.content) + "\n\n")
+			sb.WriteString(ErrorStyle.Render("  ✗ Error: "+msg.content) + "\n\n")
 		case "system":
-			sb.WriteString(SystemMsgStyle.Render(msg.content) + "\n\n")
+			sb.WriteString(SystemMsgStyle.Render("  ℹ"+msg.content) + "\n\n")
 		case "subagent":
 			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
 		}
 	}
 	if m.thinking && !m.confirming {
-		sb.WriteString(SpinnerStyle.Render("  "+m.spinner.View()+" Thinking...") + "\n")
+		statusText := m.getAnimatedStatus()
+		spinnerView := m.spinner.View()
+		switch m.spinnerState {
+		case SpinnerThinking:
+			sb.WriteString(SpinnerThinkingStyle.Render("  "+spinnerView+" ") + ThinkingLabelStyle.Render(statusText) + "\n")
+		case SpinnerTool:
+			sb.WriteString(SpinnerToolStyle.Render("  "+spinnerView+" ") + ToolLabelStyle.Render(statusText) + "\n")
+		case SpinnerNetwork:
+			sb.WriteString(WebIconStyle.Render("  "+spinnerView+" ") + InfoStyle.Render(statusText) + "\n")
+		default:
+			sb.WriteString(SpinnerStyle.Render("  "+spinnerView+" ") + statusText + "\n")
+		}
 	}
 	m.viewport.SetContent(sb.String())
 	m.viewport.GotoBottom()
@@ -437,11 +610,23 @@ func (m Model) View() string {
 	}
 	input := inputStyle.Width(m.width - 4).Render(m.textarea.View())
 
+	keyStyle := lipgloss.NewStyle().Foreground(MintGreen)
+	sepStyle := lipgloss.NewStyle().Foreground(DimGreen)
+
 	help := ""
 	if m.confirming {
-		help = ConfirmStyle.Render("  y:approve  n:deny  Ctrl+C:cancel")
+		help = "  " +
+			SuccessStyle.Render("y") + sepStyle.Render(":approve  ") +
+			ErrorStyle.Render("n") + sepStyle.Render(":deny  ") +
+			WarningStyle.Render("Ctrl+C") + sepStyle.Render(":cancel")
 	} else {
-		help = HelpStyle.Render("  Enter:send  Alt+Enter:newline  Ctrl+T:thinking  Ctrl+C:cancel  Esc:quit  /help")
+		help = "  " +
+			keyStyle.Render("Enter") + sepStyle.Render(":send  ") +
+			keyStyle.Render("Alt+Enter") + sepStyle.Render(":newline  ") +
+			keyStyle.Render("Ctrl+T") + sepStyle.Render(":thinking  ") +
+			keyStyle.Render("Ctrl+C") + sepStyle.Render(":cancel  ") +
+			keyStyle.Render("Esc") + sepStyle.Render(":quit  ") +
+			keyStyle.Render("/help")
 	}
 
 	return header + "\n" + separator + "\n" + m.viewport.View() + "\n" + input + "\n" + help

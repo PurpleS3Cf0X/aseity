@@ -95,7 +95,7 @@ func main() {
 	prov = provider.WithRetry(prov, 3)
 
 	// Startup health check: verify provider is reachable
-	fmt.Print(tui.BannerStyle.Render(tui.Banner))
+	fmt.Print(tui.GradientBanner())
 	fmt.Printf("\n  %s  %s\n",
 		tui.StatusProviderStyle.Render(" "+provName+" "),
 		tui.StatusBarStyle.Render(" "+modelName+" "),
@@ -308,7 +308,7 @@ func cmdDoctor() {
 		fatal("config error: %s", err)
 	}
 
-	fmt.Print(tui.BannerStyle.Render(tui.Banner))
+	fmt.Print(tui.GradientBanner())
 	fmt.Println(tui.BannerStyle.Render("  Service Health Check"))
 	fmt.Println()
 
@@ -366,7 +366,7 @@ func cmdDoctor() {
 func cmdSetup(docker bool) {
 	cfg, _ := config.Load()
 	modelName := cfg.DefaultModel
-	fmt.Print(tui.BannerStyle.Render(tui.Banner))
+	fmt.Print(tui.GradientBanner())
 
 	var ok bool
 	if docker {

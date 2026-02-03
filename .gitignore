@@ -1,5 +1,5 @@
 bin/
-aseity
+/aseity
 *.exe
 .env
 *.log

@@ -3,24 +3,36 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	// Core palette
-	Green       = lipgloss.Color("#00FF41")
-	BrightGreen = lipgloss.Color("#39FF14")
-	MedGreen    = lipgloss.Color("#00C832")
-	DarkGreen   = lipgloss.Color("#008F11")
-	DimGreen    = lipgloss.Color("#003B00")
-	Cyan        = lipgloss.Color("#00D4AA")
+	// Core palette — Enhanced Matrix-inspired with Claude Code accents
+	Green       = lipgloss.Color("#00FF41") // Primary neon green
+	BrightGreen = lipgloss.Color("#39FF14") // Highlight green
+	MedGreen    = lipgloss.Color("#00C832") // Mid-tone green
+	DarkGreen   = lipgloss.Color("#008F11") // Darker green
+	DimGreen    = lipgloss.Color("#004d00") // Subtle green (brighter)
+	Cyan        = lipgloss.Color("#00D4FF") // Brighter cyan for assistant
+	Teal        = lipgloss.Color("#00AA88") // Teal accent
 	Black       = lipgloss.Color("#0D0208")
 	DarkBG      = lipgloss.Color("#0a0a0f")
 	DarkGray    = lipgloss.Color("#1a1a2e")
-	MidGray     = lipgloss.Color("#3a3a4e")
+	MidGray     = lipgloss.Color("#5a5a6e") // Brighter for readability
 	LightGray   = lipgloss.Color("#aaaaaa")
 	White       = lipgloss.Color("#FFFFFF")
 
-	// Status bar
+	// Accent colors — Claude Code inspired
+	Purple       = lipgloss.Color("#A855F7") // Thinking/reasoning
+	DimPurple    = lipgloss.Color("#7C3AED") // Thinking text
+	Orange       = lipgloss.Color("#FF9500") // Warnings/confirmations
+	Gold         = lipgloss.Color("#FFD700") // Highlights
+	Blue         = lipgloss.Color("#3B82F6") // Links/info
+	Red          = lipgloss.Color("#EF4444") // Errors
+	Magenta      = lipgloss.Color("#EC4899") // Special actions
+	SoftYellow   = lipgloss.Color("#FBBF24") // Soft highlights
+	MintGreen    = lipgloss.Color("#34D399") // Success indicators
+
+	// Status bar — Gradient effect
 	StatusBarStyle = lipgloss.NewStyle().
 			Background(DarkGreen).
-			Foreground(Black).
+			Foreground(White).
 			Bold(true).
 			Padding(0, 1)
 
@@ -30,11 +42,12 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	// Token counter in status bar
+	// Token counter — more visible
 	TokenStyle = lipgloss.NewStyle().
-			Foreground(DimGreen)
+			Foreground(Teal).
+			Italic(true)
 
-	// User messages — WHITE font as requested
+	// User messages — WHITE font with green accent label
 	UserLabelStyle = lipgloss.NewStyle().
 			Foreground(BrightGreen).
 			Bold(true)
@@ -42,7 +55,7 @@ var (
 	UserMsgStyle = lipgloss.NewStyle().
 			Foreground(White)
 
-	// Assistant messages
+	// Assistant messages — Cyan branding
 	AssistantLabelStyle = lipgloss.NewStyle().
 				Foreground(Cyan).
 				Bold(true)
@@ -50,33 +63,49 @@ var (
 	AssistantMsgStyle = lipgloss.NewStyle().
 				Foreground(White)
 
-	// Tool calls
+	// Tool calls — Enhanced with icons and colors
 	ToolCallStyle = lipgloss.NewStyle().
-			Foreground(DarkGreen).
-			Italic(true)
+			Foreground(MedGreen)
 
 	ToolLabelStyle = lipgloss.NewStyle().
-			Foreground(MedGreen).
+			Foreground(MintGreen).
 			Bold(true)
 
 	CommandStyle = lipgloss.NewStyle().
-			Foreground(BrightGreen).
+			Foreground(SoftYellow).
 			Bold(true)
 
 	ToolResultStyle = lipgloss.NewStyle().
 			Foreground(MidGray)
 
-	// Confirmation dialog
+	// Tool-specific colors
+	BashIconStyle = lipgloss.NewStyle().
+			Foreground(Orange).
+			Bold(true)
+
+	FileIconStyle = lipgloss.NewStyle().
+			Foreground(Blue).
+			Bold(true)
+
+	WebIconStyle = lipgloss.NewStyle().
+			Foreground(Magenta).
+			Bold(true)
+
+	AgentIconStyle = lipgloss.NewStyle().
+			Foreground(Purple).
+			Bold(true)
+
+	// Confirmation dialog — Orange warning style
 	ConfirmStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFD700")).
+			Foreground(Orange).
 			Bold(true)
 
 	ConfirmInputStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("#FFD700")).
+				BorderForeground(Orange).
 				Padding(0, 1)
 
-	// Input
+	// Input — Animated border feel
 	InputBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(DarkGreen).
@@ -84,50 +113,75 @@ var (
 
 	InputActiveStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(Green).
+				BorderForeground(BrightGreen).
 				Padding(0, 1)
 
-	// Spinner
+	// Spinner — Multiple styles for different states
 	SpinnerStyle = lipgloss.NewStyle().
 			Foreground(BrightGreen)
+
+	SpinnerThinkingStyle = lipgloss.NewStyle().
+				Foreground(Purple)
+
+	SpinnerToolStyle = lipgloss.NewStyle().
+				Foreground(Cyan)
 
 	// Banner
 	BannerStyle = lipgloss.NewStyle().
 			Foreground(Green).
 			Bold(true)
 
-	// Separator
+	// Separator — Subtle gradient
 	SeparatorStyle = lipgloss.NewStyle().
 			Foreground(DimGreen)
 
-	// Error
+	// Error — Red with emphasis
 	ErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF4136")).
+			Foreground(Red).
 			Bold(true)
 
-	// Help text
+	// Help text — More visible
 	HelpStyle = lipgloss.NewStyle().
 			Foreground(DimGreen)
 
-	// Thinking blocks
+	// Thinking blocks — Purple theme (like Claude's reasoning)
 	ThinkingLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#556B2F")).
-				Italic(true).
+				Foreground(Purple).
 				Bold(true)
 
 	ThinkingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#4a5a3a")).
+			Foreground(DimPurple).
 			Italic(true)
 
-	// Sub-agent activity
+	// Sub-agent activity — Distinct purple/teal
 	SubAgentStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00AA77")).
+			Foreground(Teal).
 			Italic(true)
 
 	// Slash command feedback
 	SystemMsgStyle = lipgloss.NewStyle().
-			Foreground(MedGreen).
+			Foreground(MintGreen).
 			Italic(true)
+
+	// Code blocks and syntax highlighting accents
+	CodeBlockStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#1a1a2e")).
+			Foreground(White).
+			Padding(0, 1)
+
+	// Success style
+	SuccessStyle = lipgloss.NewStyle().
+			Foreground(MintGreen).
+			Bold(true)
+
+	// Warning style
+	WarningStyle = lipgloss.NewStyle().
+			Foreground(Orange).
+			Bold(true)
+
+	// Info style
+	InfoStyle = lipgloss.NewStyle().
+			Foreground(Blue)
 )
 
 const Banner = `
@@ -138,3 +192,32 @@ const Banner = `
   ██║  ██║███████║███████╗██║   ██║      ██║
   ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝      ╚═╝
 `
+
+// GradientBanner returns a gradient-colored banner (green to cyan)
+func GradientBanner() string {
+	lines := []string{
+		"   ██████╗ ███████╗███████╗██╗████████╗██╗   ██╗",
+		"  ██╔══██╗██╔════╝██╔════╝██║╚══██╔══╝╚██╗ ██╔╝",
+		"  ███████║███████╗█████╗  ██║   ██║    ╚████╔╝ ",
+		"  ██╔══██║╚════██║██╔══╝  ██║   ██║     ╚██╔╝  ",
+		"  ██║  ██║███████║███████╗██║   ██║      ██║   ",
+		"  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝      ╚═╝   ",
+	}
+
+	// Gradient colors from bright green to cyan
+	colors := []lipgloss.Color{
+		"#39FF14", // Bright green
+		"#00FF41", // Matrix green
+		"#00E636", // Mid green
+		"#00D4AA", // Teal
+		"#00C8D4", // Cyan-teal
+		"#00D4FF", // Cyan
+	}
+
+	result := "\n"
+	for i, line := range lines {
+		style := lipgloss.NewStyle().Foreground(colors[i]).Bold(true)
+		result += style.Render(line) + "\n"
+	}
+	return result
+}
