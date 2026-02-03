@@ -31,7 +31,7 @@ func TestRecursiveAgent_ContextLoading(t *testing.T) {
 
 	// 2. Setup Agent Manager
 	// 2. Setup Agent Manager
-	toolReg := tools.NewRegistry(nil)
+	toolReg := tools.NewRegistry(nil, false)
 	mgr := NewAgentManager(mockProv, toolReg, 1)
 
 	// 3. Define a real file to load as context

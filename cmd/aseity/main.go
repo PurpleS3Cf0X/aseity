@@ -29,6 +29,8 @@ func main() {
 	versionFlag := flag.Bool("version", false, "Print version")
 	helpFlag := flag.Bool("help", false, "Show help")
 	flag.BoolVar(helpFlag, "h", false, "Show help")
+	yesFlag := flag.Bool("yes", false, "Auto-approve all tool execution")
+	flag.BoolVar(yesFlag, "y", false, "Auto-approve all tool execution")
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -36,6 +38,7 @@ func main() {
 		showHelp()
 		os.Exit(0)
 	}
+	// ... (content skipped, targeting lines around 412 for NewRegistry)
 
 	if *versionFlag {
 		fmt.Printf("aseity %s (%s)\n", version.Version, version.Commit)
@@ -160,7 +163,7 @@ func main() {
 	}
 	fmt.Println()
 
-	launchTUI(cfg, provName, modelName)
+	launchTUI(cfg, provName, modelName, *yesFlag)
 }
 
 func makeProvider(cfg *config.Config, name, modelName string) (provider.Provider, error) {
@@ -398,18 +401,18 @@ func cmdSetup(docker bool) {
 
 	// Setup succeeded — launch the TUI directly instead of asking user to run again
 	fmt.Println()
-	launchTUI(cfg, cfg.DefaultProvider, modelName)
+	launchTUI(cfg, cfg.DefaultProvider, modelName, false)
 }
 
 // launchTUI starts the interactive chat interface
-func launchTUI(cfg *config.Config, provName, modelName string) {
+func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool) {
 	prov, err := makeProvider(cfg, provName, modelName)
 	if err != nil {
 		fatal("%s", err)
 	}
 	prov = provider.WithRetry(prov, 3)
 
-	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove)
+	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove, allowAll)
 	tools.RegisterDefaults(toolReg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
 
 	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
@@ -480,6 +483,7 @@ func showHelp() {
   --provider <name>           Use specific provider (ollama, openai, anthropic, google)
   --model <name>              Use specific model
   --version                   Show version
+  --yes, -y                   Auto-approve all tool execution (dangerous)
   --help, -h                  Show this help
 
 ` + tui.UserLabelStyle.Render("EXAMPLES:") + `

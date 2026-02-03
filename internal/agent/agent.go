@@ -73,7 +73,14 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 
 func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 	for turn := 0; turn < MaxTurns; turn++ {
-		stream, err := a.prov.Chat(ctx, a.conv.Messages(), a.tools.ToolDefs())
+		// Construct the context with a dynamic reminder
+		msgs := a.conv.Messages()
+
+		// Inject a reminder at the end of context to keep the model focused
+		reminder := fmt.Sprintf("Turn %d/%d. Review the history. If you just ran a command, did it work? If it failed, try a DIFFERENT approach. Do not repeat mistakes.", turn+1, MaxTurns)
+		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: reminder})
+
+		stream, err := a.prov.Chat(ctx, msgs, a.tools.ToolDefs())
 		if err != nil {
 			events <- Event{Type: EventError, Error: err.Error(), Done: true}
 			return

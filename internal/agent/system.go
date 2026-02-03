@@ -63,5 +63,10 @@ The user can type these slash commands in the chat:
 - /save [path] — export conversation to a markdown file
 - /tokens — show estimated token usage
 - /quit — exit aseity
+
+## Session Management
+- **Maintain a Mental Map**: Keep track of what you have tried and what failed.
+- **Avoid Loops**: If a command fails or produces unexpected output, do NOT try the exact same command again without fixing the root cause.
+- **Verify Success**: After running a command (like creating a file), always verify it worked (e.g., by cat-ing the file or running it) before moving on.
 `, cwd, runtime.GOOS, runtime.GOARCH)
 }

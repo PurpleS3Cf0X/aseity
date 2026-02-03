@@ -10,14 +10,15 @@ import (
 type Registry struct {
 	tools       map[string]Tool
 	autoApprove map[string]bool
+	allowAll    bool
 }
 
-func NewRegistry(autoApprove []string) *Registry {
+func NewRegistry(autoApprove []string, allowAll bool) *Registry {
 	aa := make(map[string]bool)
 	for _, name := range autoApprove {
 		aa[name] = true
 	}
-	return &Registry{tools: make(map[string]Tool), autoApprove: aa}
+	return &Registry{tools: make(map[string]Tool), autoApprove: aa, allowAll: allowAll}
 }
 
 func (r *Registry) Register(t Tool) {
@@ -56,6 +57,9 @@ func (r *Registry) Execute(ctx context.Context, name, args string, callback func
 }
 
 func (r *Registry) NeedsConfirmation(name string) bool {
+	if r.allowAll {
+		return false
+	}
 	if r.autoApprove[name] {
 		return false
 	}
