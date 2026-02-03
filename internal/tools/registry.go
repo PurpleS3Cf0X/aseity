@@ -81,4 +81,5 @@ func RegisterDefaults(r *Registry, allowedCmds, disallowedCmds []string) {
 	r.Register(&FileSearchTool{})
 	r.Register(&WebSearchTool{})
 	r.Register(&WebFetchTool{})
+	r.Register(&WebCrawlTool{})
 }
