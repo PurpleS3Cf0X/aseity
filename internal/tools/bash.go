@@ -63,6 +63,9 @@ func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback f
 		return Result{Error: err.Error()}, nil
 	}
 
+	// Enforce non-interactive sudo to prevent hanging
+	args.Command = enforceNonInteractive(args.Command)
+
 	timeout := 120
 	if args.Timeout > 0 {
 		timeout = args.Timeout
@@ -123,7 +126,12 @@ func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback f
 	}
 
 	if err != nil {
-		return Result{Output: output, Error: err.Error()}, nil
+		errMsg := err.Error()
+		// Check if it failed due to sudo password requirement
+		if strings.Contains(output, "password is required") || strings.Contains(output, "interactive mode") {
+			errMsg += " (Command failed because it required intreactive input. Try running 'sudo' manually first or run aseity as root.)"
+		}
+		return Result{Output: output, Error: errMsg}, nil
 	}
 	return Result{Output: output}, nil
 }
@@ -221,4 +229,23 @@ func tryParseCommand(rawArgs string) string {
 	}
 
 	return ""
+}
+
+func enforceNonInteractive(cmd string) string {
+	// If the command uses sudo, ensure it runs non-interactively (-n)
+	// This prevents the process from hanging indefinitely waiting for a password.
+
+	// Case 1: Command starts with sudo
+	if strings.HasPrefix(cmd, "sudo ") && !strings.Contains(cmd, "sudo -n") {
+		cmd = strings.Replace(cmd, "sudo ", "sudo -n ", 1)
+	}
+
+	// Case 2: Command contains sudo inside (e.g. "apt update && sudo apt install")
+	// We recklessly replace " sudo " with " sudo -n " because sudo handles multiple -n flags fine,
+	// and it's better to be safe than stuck.
+	if strings.Contains(cmd, " sudo ") && !strings.Contains(cmd, " sudo -n") {
+		cmd = strings.ReplaceAll(cmd, " sudo ", " sudo -n ")
+	}
+
+	return cmd
 }
