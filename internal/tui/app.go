@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -49,6 +50,30 @@ var (
 		Frames: []string{"🌍", "🌎", "🌏"},
 		FPS:    time.Second / 3,
 	}
+
+	// Fun/Cool Retro Spinners (No Emojis allowed!)
+	FunSpinners = []spinner.Spinner{
+		// 1. The Classic
+		{Frames: []string{"|", "/", "-", "\\"}, FPS: time.Second / 10},
+		// 2. Scanline
+		{Frames: []string{"[     ]", "[=    ]", "[==   ]", "[===  ]", "[ ====]", "[  ===]", "[   ==]", "[    =]", "[     ]"}, FPS: time.Second / 12},
+		// 3. Digital Rain (Braille)
+		{Frames: []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}, FPS: time.Second / 10},
+		// 4. Equalizer
+		{Frames: []string{" ", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃", "▂", " "}, FPS: time.Second / 10},
+		// 5. Square Corners
+		{Frames: []string{"▖", "▘", "▝", "▗"}, FPS: time.Second / 6},
+		// 6. Growing Block
+		{Frames: []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏"}, FPS: time.Second / 12},
+		// 7. Arrow Spin
+		{Frames: []string{"←", "↖", "↑", "↗", "→", "↘", "↓", "↙"}, FPS: time.Second / 8},
+		// 8. Bouncing Dot
+		{Frames: []string{"( ●    )", "(  ●   )", "(   ●  )", "(    ● )", "(     ●)", "(    ● )", "(   ●  )", "(  ●   )"}, FPS: time.Second / 10},
+		// 9. Retro Computer
+		{Frames: []string{">_", "> "}, FPS: time.Second / 2},
+		// 10. Starfield
+		{Frames: []string{".  ", " . ", "  ."}, FPS: time.Second / 4},
+	}
 )
 
 // Tool icons for visual distinction
@@ -89,15 +114,16 @@ type Model struct {
 	modelName     string
 	currentTool   string // track which tool is running for animation
 
-	agent        *agent.Agent
-	prov         provider.Provider
-	toolReg      *tools.Registry
-	eventCh      chan agent.Event
-	ctx          context.Context
-	cancel       context.CancelFunc
-	renderer     *glamour.TermRenderer
-	frame        int // animation frame counter
-	inputRequest bool
+	agent                  *agent.Agent
+	prov                   provider.Provider
+	toolReg                *tools.Registry
+	eventCh                chan agent.Event
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	renderer               *glamour.TermRenderer
+	frame                  int // animation frame counter
+	inputRequest           bool
+	currentThinkingSpinner spinner.Spinner
 }
 
 type chatMessage struct {
@@ -130,18 +156,19 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	)
 
 	m := Model{
-		viewport:     vp,
-		textarea:     ta,
-		spinner:      sp,
-		showThinking: true,
-		providerName: provName,
-		modelName:    modelName,
-		prov:         prov,
-		toolReg:      toolReg,
-		agent:        ag,
-		ctx:          ctx,
-		cancel:       cancel,
-		renderer:     r,
+		viewport:               vp,
+		textarea:               ta,
+		spinner:                sp,
+		showThinking:           true,
+		providerName:           provName,
+		modelName:              modelName,
+		prov:                   prov,
+		toolReg:                toolReg,
+		agent:                  ag,
+		ctx:                    ctx,
+		cancel:                 cancel,
+		renderer:               r,
+		currentThinkingSpinner: ThinkingSpinner,
 	}
 
 	// Add welcome message
@@ -257,6 +284,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.messages = append(m.messages, chatMessage{role: "user", content: text})
 			m.thinking = true
+
+			// Pick a fun random animation for this turn!
+			m.currentThinkingSpinner = FunSpinners[rand.Intn(len(FunSpinners))]
+			m.spinner.Spinner = m.currentThinkingSpinner
+
 			m.rebuildView()
 
 			m.eventCh = make(chan agent.Event, 64)
@@ -499,7 +531,7 @@ func (m *Model) setSpinnerForTool(toolName string) {
 
 // resetSpinner returns to thinking state
 func (m *Model) resetSpinner() {
-	m.spinner.Spinner = ThinkingSpinner
+	m.spinner.Spinner = m.currentThinkingSpinner
 	m.spinner.Style = SpinnerThinkingStyle
 	m.spinnerState = SpinnerThinking
 	m.currentTool = ""
