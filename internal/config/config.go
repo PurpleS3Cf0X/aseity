@@ -48,7 +48,7 @@ func expandEnv(s string) string {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider: "ollama",
-		DefaultModel:    "deepseek-r1",
+		DefaultModel:    "qwen2.5:3b",
 		Theme:           "green",
 		MaxTurns:        50,
 		MaxTokens:       100000,
