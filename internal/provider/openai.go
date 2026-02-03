@@ -68,7 +68,7 @@ type oaiRequest struct {
 
 type oaiMessage struct {
 	Role       string        `json:"role"`
-	Content    string        `json:"content,omitempty"`
+	Content    string        `json:"content"`
 	ToolCalls  []oaiToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string        `json:"tool_call_id,omitempty"`
 }
