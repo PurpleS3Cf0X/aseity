@@ -226,8 +226,13 @@ func (w *WebFetchTool) Execute(ctx context.Context, rawArgs string) (Result, err
 // htmlToText does a lightweight conversion of HTML to readable text.
 func htmlToText(html string) string {
 	// Remove script and style blocks
-	scriptRe := regexp.MustCompile(`(?is)<(script|style|noscript)[^>]*>.*?</\1>`)
+	// Go regexp doesn't support backreferences like \1, so we handle them separately
+	scriptRe := regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
 	html = scriptRe.ReplaceAllString(html, "")
+	styleRe := regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
+	html = styleRe.ReplaceAllString(html, "")
+	noscriptRe := regexp.MustCompile(`(?is)<noscript[^>]*>.*?</noscript>`)
+	html = noscriptRe.ReplaceAllString(html, "")
 
 	// Convert common block elements to newlines
 	blockRe := regexp.MustCompile(`(?i)</(p|div|h[1-6]|li|tr|br|hr)[^>]*>`)
