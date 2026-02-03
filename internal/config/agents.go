@@ -9,10 +9,11 @@ import (
 )
 
 type AgentConfig struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Prompt      string   `yaml:"system_prompt"`
-	Tools       []string `yaml:"allowed_tools,omitempty"` // For future use
+	Name           string   `yaml:"name"`
+	Description    string   `yaml:"description"`
+	Prompt         string   `yaml:"system_prompt"`
+	Tools          []string `yaml:"allowed_tools,omitempty"`   // For future use
+	KnowledgePaths []string `yaml:"knowledge_paths,omitempty"` // Directories to search for context
 }
 
 func GetAgentsDir() (string, error) {

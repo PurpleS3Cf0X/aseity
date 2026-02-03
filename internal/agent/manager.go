@@ -114,6 +114,13 @@ func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []s
 				return
 			}
 			systemPrompt = cfg.Prompt
+			if len(cfg.KnowledgePaths) > 0 {
+				systemPrompt += "\n\n## Knowledge Base\nYou have access to the following knowledge repositories:\n"
+				for _, path := range cfg.KnowledgePaths {
+					systemPrompt += fmt.Sprintf("- %s\n", path)
+				}
+				systemPrompt += "\nWhen answering questions, you MUST first search these directories using 'file_search' or 'file_read' to find relevant context.\n"
+			}
 		}
 
 		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1, systemPrompt)

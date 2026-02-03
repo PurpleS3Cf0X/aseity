@@ -36,15 +36,23 @@ func (c *CreateAgentTool) Parameters() any {
 				"type":        "string",
 				"description": "The system instructions that define the agent's behavior, persona, and constraints.",
 			},
+			"knowledge_paths": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+				"description": "Optional list of absolute paths to directories containing knowledge files this agent should use.",
+			},
 		},
 		"required": []string{"name", "system_prompt"},
 	}
 }
 
 type createAgentArgs struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	SystemPrompt   string   `json:"system_prompt"`
+	KnowledgePaths []string `json:"knowledge_paths,omitempty"`
 }
 
 func (c *CreateAgentTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
@@ -58,9 +66,10 @@ func (c *CreateAgentTool) Execute(ctx context.Context, rawArgs string) (Result, 
 	}
 
 	cfg := config.AgentConfig{
-		Name:        args.Name,
-		Description: args.Description,
-		Prompt:      args.SystemPrompt,
+		Name:           args.Name,
+		Description:    args.Description,
+		Prompt:         args.SystemPrompt,
+		KnowledgePaths: args.KnowledgePaths,
 	}
 
 	if err := config.SaveAgentConfig(cfg); err != nil {

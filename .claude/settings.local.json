@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(go mod init:*)",
+      "Bash(git config:*)",
+      "Bash(gh auth:*)",
+      "Bash(/opt/homebrew/bin/git config --global user.name)",
+      "Bash(/opt/homebrew/bin/git config --global user.email)",
+      "Bash(/opt/homebrew/bin/git init)",
+      "Bash(/opt/homebrew/bin/git add -A)",
+      "Bash(/opt/homebrew/bin/git status)",
+      "Bash(/opt/homebrew/bin/brew install:*)",
+      "Bash(gh repo create:*)",
+      "Bash(/opt/homebrew/bin/git config user.name \"PurpleS3Cf0X\")",
+      "Bash(/opt/homebrew/bin/git config user.email \"PurpleS3Cf0X@users.noreply.github.com\")",
+      "Bash(/opt/homebrew/bin/git commit -m \"$\\(cat <<''EOF''\nInitial commit: aseity CLI — multi-backend AI coding assistant\n\nGo TUI-based coding assistant with support for Ollama, vLLM, OpenAI,\nAnthropic, Google, and HuggingFace backends. Includes agent loop with\ntool calling \\(bash, file read/write/search\\), model management, health\nchecks, Docker support, and green Matrix-inspired theme.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(/usr/local/go/bin/go version:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:$PATH\")",
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)",
+      "Bash(./aseity:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(git push)",
+      "Bash(go vet:*)",
+      "Bash(./bin/aseity:*)",
+      "Bash(ollama:*)",
+      "Bash(echo:*)",
+      "Bash(gtimeout:*)",
+      "Bash(# Let''s just start ollama in background and then test aseity ollama serve 2>&1 & OLLAMA_PID=$! sleep 3 curl -s http://localhost:11434/api/tags)",
+      "Bash(curl:*)",
+      "Bash(git push:*)",
+      "Bash(go run:*)",
+      "Bash(pkill:*)"
+    ]
+  }
+}
