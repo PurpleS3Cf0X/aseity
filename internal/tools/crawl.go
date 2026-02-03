@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,7 +94,8 @@ func (w *WebCrawlTool) Execute(ctx context.Context, rawArgs string) (Result, err
 	// Execute actions
 	if err := chromedp.Run(ctx, actions...); err != nil {
 		if strings.Contains(err.Error(), "executable file not found") {
-			return Result{Error: "Web crawler requires a Chromium-based browser (Chrome, Brave, Edge). Please install configured browser to use this feature."}, nil
+			// Fallback to basic HTTP fetch
+			return w.fallbackFetch(args.URL)
 		}
 		return Result{Error: fmt.Sprintf("crawl failed: %v", err)}, nil
 	}
@@ -111,6 +114,35 @@ func (w *WebCrawlTool) Execute(ctx context.Context, rawArgs string) (Result, err
 		}
 	}
 
+	return Result{Output: output}, nil
+}
+
+func (w *WebCrawlTool) fallbackFetch(url string) (Result, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return Result{Error: "fallback failed: " + err.Error()}, nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Aseity/1.0; +http://aseity.app)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Result{Error: "fallback request failed: " + err.Error()}, nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Result{Error: "failed to read fallback body: " + err.Error()}, nil
+	}
+
+	content := string(body)
+	// Reuse htmlToText from web.go (same package)
+	text := htmlToText(content)
+
+	output := fmt.Sprintf("[WARNING: Native browser not found. Using basic HTTP fallback. Install Chrome for better results.]\n\nCrawled (Fallback): %s\n\nContent:\n%s", url, truncateText(text, 5000))
 	return Result{Output: output}, nil
 }
 
