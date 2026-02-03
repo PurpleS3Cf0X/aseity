@@ -96,6 +96,7 @@ type Model struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	renderer *glamour.TermRenderer
+	frame    int // animation frame counter
 }
 
 type chatMessage struct {
@@ -324,7 +325,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
+		m.frame++
 		m.spinner, cmd = m.spinner.Update(msg)
+		// Force view rebuild for animation if on welcome screen (first message)
+		if len(m.messages) > 0 && m.messages[0].role == "welcome" {
+			m.rebuildView()
+		}
 		cmds = append(cmds, cmd)
 
 	case tea.MouseMsg:
@@ -632,9 +638,34 @@ func (m *Model) rebuildView() {
 		case "subagent":
 			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
 		case "welcome":
-			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
-			for _, line := range strings.Split(msg.content, "\n") {
-				sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
+			// Animated Banner
+			banner := AnimatedBanner(m.frame)
+
+			// Glowing Border Effect
+			borderColor := Green
+			if m.frame%20 > 10 {
+				borderColor = BrightGreen
+			}
+
+			logo := LogoBoxStyle.Copy().
+				BorderForeground(borderColor).
+				Render(banner)
+
+			text := WelcomeTextStyle.Render(fmt.Sprintf("\nWelcome to Aseity! Connected to %s", m.modelName))
+
+			// Center everything roughly based on width (simplified centering)
+			// For a true center we'd need to measure widths, but left-align with padding looks good too.
+
+			sb.WriteString(logo + "\n")
+			sb.WriteString(text + "\n\n")
+
+			// Intro text content
+			lines := strings.Split(msg.content, "\n")
+			// Skip first line of original content as we rendered it custom
+			if len(lines) > 0 {
+				for _, line := range lines[1:] {
+					sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
+				}
 			}
 			sb.WriteString("\n")
 		}

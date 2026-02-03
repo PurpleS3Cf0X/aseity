@@ -182,6 +182,18 @@ var (
 	// Info style
 	InfoStyle = lipgloss.NewStyle().
 			Foreground(Blue)
+
+	// Logo & Welcome Styles
+	LogoBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(Green).
+			Padding(1, 2).
+			Margin(1, 0)
+
+	WelcomeTextStyle = lipgloss.NewStyle().
+				Foreground(Cyan).
+				Bold(true).
+				Align(lipgloss.Center)
 )
 
 const Banner = `
@@ -193,8 +205,8 @@ const Banner = `
   ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝      ╚═╝
 `
 
-// GradientBanner returns a gradient-colored banner (green to cyan)
-func GradientBanner() string {
+// AnimatedBanner returns a frame-based gradient banner
+func AnimatedBanner(frame int) string {
 	lines := []string{
 		"   ██████╗ ███████╗███████╗██╗████████╗██╗   ██╗",
 		"  ██╔══██╗██╔════╝██╔════╝██║╚══██╔══╝╚██╗ ██╔╝",
@@ -204,20 +216,33 @@ func GradientBanner() string {
 		"  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝      ╚═╝   ",
 	}
 
-	// Gradient colors from bright green to cyan
-	colors := []lipgloss.Color{
+	// Gradient palette
+	palette := []lipgloss.Color{
 		"#39FF14", // Bright green
 		"#00FF41", // Matrix green
 		"#00E636", // Mid green
 		"#00D4AA", // Teal
 		"#00C8D4", // Cyan-teal
 		"#00D4FF", // Cyan
+		"#0099FF", // Blue-Cyan
+		"#00D4FF", // Cyan
+		"#00C8D4", // Cyan-teal
+		"#00D4AA", // Teal
+		"#00E636", // Mid green
+		"#00FF41", // Matrix green
 	}
 
-	result := "\n"
+	result := ""
 	for i, line := range lines {
-		style := lipgloss.NewStyle().Foreground(colors[i]).Bold(true)
+		// Calculate color index based on frame + line offset
+		idx := (frame/2 + i) % len(palette)
+		style := lipgloss.NewStyle().Foreground(palette[idx]).Bold(true)
 		result += style.Render(line) + "\n"
 	}
 	return result
+}
+
+// GradientBanner keeps compatibility if needed, using static frame 0
+func GradientBanner() string {
+	return AnimatedBanner(0)
 }
