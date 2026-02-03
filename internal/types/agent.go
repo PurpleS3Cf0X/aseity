@@ -5,7 +5,7 @@ import "context"
 // AgentSpawner is the interface both agent.AgentManager implements
 // and tools.SpawnAgentTool consumes, breaking the import cycle.
 type AgentSpawner interface {
-	Spawn(ctx context.Context, task string) (int, error)
+	Spawn(ctx context.Context, task string, contextFiles []string) (int, error)
 	Cancel(id int) error
 	Get(id int) (AgentInfo, bool)
 	List() []AgentInfo

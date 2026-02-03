@@ -22,7 +22,8 @@ func NewSpawnAgentTool(spawner types.AgentSpawner) *SpawnAgentTool {
 }
 
 type spawnAgentArgs struct {
-	Task string `json:"task"`
+	Task         string   `json:"task"`
+	ContextFiles []string `json:"context_files,omitempty"`
 }
 
 func (s *SpawnAgentTool) Name() string            { return "spawn_agent" }
@@ -39,6 +40,11 @@ func (s *SpawnAgentTool) Parameters() any {
 				"type":        "string",
 				"description": "The task description for the sub-agent to accomplish",
 			},
+			"context_files": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "List of absolute file paths to load into the sub-agent's context immediately.",
+			},
 		},
 		"required": []string{"task"},
 	}
@@ -54,7 +60,7 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 		return Result{Error: "agent manager not initialized"}, nil
 	}
 
-	id, err := s.spawner.Spawn(ctx, args.Task)
+	id, err := s.spawner.Spawn(ctx, args.Task, args.ContextFiles)
 	if err != nil {
 		return Result{Error: err.Error()}, nil
 	}

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,7 +65,7 @@ func NewAgentManagerWithDepth(prov provider.Provider, toolReg *tools.Registry, m
 	return am
 }
 
-func (am *AgentManager) Spawn(ctx context.Context, task string) (int, error) {
+func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []string) (int, error) {
 	// Check nesting depth
 	if am.depth >= MaxAgentDepth {
 		return 0, fmt.Errorf("maximum agent nesting depth (%d) reached — cannot spawn sub-agent", MaxAgentDepth)
@@ -98,6 +99,31 @@ func (am *AgentManager) Spawn(ctx context.Context, task string) (int, error) {
 
 	go func() {
 		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1)
+
+		// Pre-load context files if provided
+		if len(contextFiles) > 0 {
+			var contextBuilder strings.Builder
+			contextBuilder.WriteString("I have loaded the following context files for you:\n\n")
+			for _, path := range contextFiles {
+				// We reuse the FileReadTool logic or just simple os.ReadFile since agent is internal
+				// But to be consistent with tools, let's just read it directly here.
+				// For safety, we should probably check if file exists.
+				// We'll limit the size to avoid blowing up context.
+				// Read file directly
+				content, err := os.ReadFile(path)
+				if err != nil {
+					contextBuilder.WriteString(fmt.Sprintf("Error reading %s: %s\n", path, err))
+				} else {
+					str := string(content)
+					if len(str) > 5000 {
+						str = str[:5000] + "\n... (truncated)"
+					}
+					contextBuilder.WriteString(fmt.Sprintf("--- %s ---\n%s\n\n", path, str))
+				}
+			}
+			ag.Conversation().AddUser(contextBuilder.String())
+		}
+
 		// Sub-agents auto-approve all tools
 		go func() {
 			for {
