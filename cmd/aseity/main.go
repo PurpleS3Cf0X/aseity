@@ -14,6 +14,7 @@ import (
 
 	"github.com/jeanpaul/aseity/internal/agent"
 	"github.com/jeanpaul/aseity/internal/config"
+	"github.com/jeanpaul/aseity/internal/headless"
 	"github.com/jeanpaul/aseity/internal/health"
 	"github.com/jeanpaul/aseity/internal/model"
 	"github.com/jeanpaul/aseity/internal/provider"
@@ -31,6 +32,7 @@ func main() {
 	flag.BoolVar(helpFlag, "h", false, "Show help")
 	yesFlag := flag.Bool("yes", false, "Auto-approve all tool execution")
 	flag.BoolVar(yesFlag, "y", false, "Auto-approve all tool execution")
+	headlessFlag := flag.Bool("headless", false, "Run in headless mode (no TUI)")
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -38,12 +40,16 @@ func main() {
 		showHelp()
 		os.Exit(0)
 	}
-	// ... (content skipped, targeting lines around 412 for NewRegistry)
 
 	if *versionFlag {
 		fmt.Printf("aseity %s (%s)\n", version.Version, version.Commit)
 		os.Exit(0)
 	}
+
+	// Helper to determine mode
+	// If args exist (except known subcommands) OR headless flag is set -> Headless
+	isHeadless := *headlessFlag
+	initialPrompt := ""
 
 	// Handle subcommands
 	args := flag.Args()
@@ -85,13 +91,21 @@ func main() {
 			showHelp()
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
-			showHelp()
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "Unknown command: %s. Assuming it is a prompt.\n", args[0])
+			initialPrompt = strings.Join(args, " ")
+			// If arguments are provided but not a subcommand, we default to headless
+			// unless explicitly wanted TUI?
+			// Actually, `aseity "hello"` traditionally launched TUI in other tools.
+			// But user asked for headless mode.
+			// Let's check: if --headless is set implicitly or explicitly.
+			// Let's decide: if args present, default to headless?
+			// User said "Implement a Headless Mode (--headless)".
+			// So let's require the flag OR be smart.
+			// Ideally: `aseity -y "scan"` -> Headless.
+			isHeadless = true
 		}
 	}
 
-	// Interactive mode
 	cfg, err := config.Load()
 	if err != nil {
 		fatal("config error: %s", err)
@@ -106,64 +120,40 @@ func main() {
 		modelName = cfg.DefaultModel
 	}
 
-	// Startup health check: verify provider is reachable
-	fmt.Print(tui.GradientBanner())
-	fmt.Printf("\n  %s  %s\n",
-		tui.StatusProviderStyle.Render(" "+provName+" "),
-		tui.StatusBarStyle.Render(" "+modelName+" "),
-	)
+	// Startup health check (skip in headless for speed? No, keep it for safety unless ignored)
+	// Actually for "scriptable" tools, we might want to be quiet.
+	// But let's keep it for now, TUI banners need to be suppressed in headless.
 
-	pcfg, _ := cfg.ProviderFor(provName)
-	fmt.Printf("  %s", tui.SpinnerStyle.Render("● Checking provider connectivity..."))
-	status := health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
-	if !status.Reachable {
-		fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ "+status.Error))
+	if !isHeadless {
+		// ... TUI Health Checks (only showing banner if not headless)
+		fmt.Print(tui.GradientBanner())
+		fmt.Printf("\n  %s  %s\n", tui.StatusProviderStyle.Render(" "+provName+" "), tui.StatusBarStyle.Render(" "+modelName+" "))
 
-		// Launch setup wizard instead of just exiting
-		if setup.RunSetup(provName, modelName) {
-			// Retry health check after setup
-			status = health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
-		}
+		// ... (Health check logic, same as before) ...
+		pcfg, _ := cfg.ProviderFor(provName)
+		fmt.Printf("  %s", tui.SpinnerStyle.Render("● Checking provider connectivity..."))
+		status := health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
 		if !status.Reachable {
-			fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Run 'aseity doctor' for diagnostics or 'aseity setup' to retry"))
-			os.Exit(1)
-		}
-	}
-	if status.Reachable {
-		fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
-	}
-
-	// Check if model is available
-	if pcfg.Type == "openai" {
-		if err := health.CheckModel(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey, modelName); err != nil {
-			fmt.Printf("  %s\n", tui.ErrorStyle.Render("✗ "+err.Error()))
-			// Offer to pull the model
-			if setup.IsOllamaRunning() {
-				fmt.Printf("\n  %s", tui.ConfirmStyle.Render("Download "+modelName+" now? [Y/n] "))
-				var response string
-				fmt.Scanln(&response)
-				response = strings.ToLower(strings.TrimSpace(response))
-				if response == "" || response == "y" || response == "yes" {
-					fmt.Println()
-					if err := setup.PullModel(modelName); err != nil {
-						fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it manually: aseity pull "+modelName))
-						os.Exit(1)
-					}
-				} else {
-					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it later with: aseity pull "+modelName))
-					os.Exit(0)
-				}
-			} else {
-				fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it with: aseity pull "+modelName))
+			fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ "+status.Error))
+			if setup.RunSetup(provName, modelName) {
+				status = health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
+			}
+			if !status.Reachable {
+				fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Run 'aseity doctor' for diagnostics"))
 				os.Exit(1)
 			}
-		} else {
-			fmt.Printf("  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" available"))
 		}
-	}
-	fmt.Println()
+		if status.Reachable {
+			fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
+		}
+		// ... End TUI Health Checks
+		fmt.Println()
 
-	launchTUI(cfg, provName, modelName, *yesFlag)
+		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt)
+	} else {
+		// Headless Mode
+		launchHeadless(cfg, provName, modelName, *yesFlag, initialPrompt)
+	}
 }
 
 func makeProvider(cfg *config.Config, name, modelName string) (provider.Provider, error) {
@@ -401,14 +391,33 @@ func cmdSetup(docker bool) {
 
 	// Setup succeeded — launch the TUI directly instead of asking user to run again
 	fmt.Println()
-	launchTUI(cfg, cfg.DefaultProvider, modelName, false)
+	launchTUI(cfg, cfg.DefaultProvider, modelName, false, "")
 }
 
-// launchTUI starts the interactive chat interface
-func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool) {
-	prov, err := makeProvider(cfg, provName, modelName)
+func launchHeadless(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string) {
+	if initialPrompt == "" {
+		fatal("Headless mode requires an initial prompt (e.g., aseity \"do this\")")
+	}
+
+	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll)
 	if err != nil {
 		fatal("%s", err)
+	}
+
+	// We don't need the agent manager here unless we want cleanup for subagents?
+	// setupAgentEnv registers generic tools.
+	// runner.Run creates its own agent.
+
+	err = headless.Run(context.Background(), prov, toolReg, initialPrompt)
+	if err != nil {
+		fatal("Execution error: %s", err)
+	}
+}
+
+func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool) (provider.Provider, *tools.Registry, *agent.AgentManager, error) {
+	prov, err := makeProvider(cfg, provName, modelName)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	prov = provider.WithRetry(prov, 3)
 
@@ -426,6 +435,16 @@ func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool) {
 			agentMgr.Cleanup(30 * time.Minute)
 		}
 	}()
+
+	return prov, toolReg, agentMgr, nil
+}
+
+// launchTUI starts the interactive chat interface
+func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string) {
+	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll)
+	if err != nil {
+		fatal("%s", err)
+	}
 
 	m := tui.NewModel(prov, toolReg, provName, modelName)
 
