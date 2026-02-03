@@ -120,7 +120,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	ctx, cancel := context.WithCancel(context.Background())
 	ag := agent.New(prov, toolReg)
 
-	return Model{
+	m := Model{
 		viewport:     vp,
 		textarea:     ta,
 		spinner:      sp,
@@ -133,6 +133,14 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		ctx:          ctx,
 		cancel:       cancel,
 	}
+
+	// Add welcome message
+	m.messages = append(m.messages, chatMessage{
+		role:    "welcome",
+		content: fmt.Sprintf("Welcome to Aseity! You're connected to %s.\n\nI can help you with coding tasks, run commands, search the web, and manage files.\n\nTry asking me to:\n  • Explain some code\n  • Run a git command\n  • Search for documentation\n  • Create or edit a file", modelName),
+	})
+
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -559,6 +567,12 @@ func (m *Model) rebuildView() {
 			sb.WriteString(SystemMsgStyle.Render("  ℹ"+msg.content) + "\n\n")
 		case "subagent":
 			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
+		case "welcome":
+			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
+			for _, line := range strings.Split(msg.content, "\n") {
+				sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
+			}
+			sb.WriteString("\n")
 		}
 	}
 	if m.thinking && !m.confirming {

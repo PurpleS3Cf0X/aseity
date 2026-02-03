@@ -22,10 +22,18 @@ import (
 )
 
 func main() {
-	providerFlag := flag.String("provider", "", "Provider name (ollama, vllm, openai, anthropic, google, huggingface)")
+	providerFlag := flag.String("provider", "", "Provider name (ollama, vllm, openai, anthropic, google)")
 	modelFlag := flag.String("model", "", "Model name")
 	versionFlag := flag.Bool("version", false, "Print version")
+	helpFlag := flag.Bool("help", false, "Show help")
+	flag.BoolVar(helpFlag, "h", false, "Show help")
+	flag.Usage = showHelp
 	flag.Parse()
+
+	if *helpFlag {
+		showHelp()
+		os.Exit(0)
+	}
 
 	if *versionFlag {
 		fmt.Printf("aseity %s (%s)\n", version.Version, version.Commit)
@@ -68,6 +76,13 @@ func main() {
 			docker := len(args) > 1 && args[1] == "--docker"
 			cmdSetup(docker)
 			return
+		case "help":
+			showHelp()
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", args[0])
+			showHelp()
+			os.Exit(1)
 		}
 	}
 
@@ -117,12 +132,21 @@ func main() {
 	if pcfg.Type == "openai" {
 		if err := health.CheckModel(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey, modelName); err != nil {
 			fmt.Printf("  %s\n", tui.ErrorStyle.Render("✗ "+err.Error()))
-			// Try to pull the model automatically
+			// Offer to pull the model
 			if setup.IsOllamaRunning() {
-				fmt.Println()
-				if err := setup.PullModel(modelName); err != nil {
-					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it manually: aseity pull "+modelName))
-					os.Exit(1)
+				fmt.Printf("\n  %s", tui.ConfirmStyle.Render("Download "+modelName+" now? [Y/n] "))
+				var response string
+				fmt.Scanln(&response)
+				response = strings.ToLower(strings.TrimSpace(response))
+				if response == "" || response == "y" || response == "yes" {
+					fmt.Println()
+					if err := setup.PullModel(modelName); err != nil {
+						fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it manually: aseity pull "+modelName))
+						os.Exit(1)
+					}
+				} else {
+					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it later with: aseity pull "+modelName))
+					os.Exit(0)
 				}
 			} else {
 				fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it with: aseity pull "+modelName))
@@ -282,11 +306,19 @@ func cmdDoctor() {
 	fmt.Println(tui.BannerStyle.Render("  Service Health Check"))
 	fmt.Println()
 
-	allOk := true
+	defaultOk := true
+	otherIssues := 0
+
 	for name, pcfg := range cfg.Providers {
+		isDefault := name == cfg.DefaultProvider
+		label := name
+		if isDefault {
+			label = name + " (default)"
+		}
+
 		fmt.Printf("  %s %s ... ",
 			tui.ToolCallStyle.Render("●"),
-			tui.UserLabelStyle.Render(name),
+			tui.UserLabelStyle.Render(label),
 		)
 		status := health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
 		if status.Reachable {
@@ -300,8 +332,13 @@ func cmdDoctor() {
 				tui.HelpStyle.Render(status.Latency.Round(time.Millisecond).String()),
 			)
 		} else {
-			allOk = false
-			fmt.Printf("%s\n", tui.ErrorStyle.Render("✗ "+status.Error))
+			if isDefault {
+				defaultOk = false
+				fmt.Printf("%s\n", tui.ErrorStyle.Render("✗ "+status.Error))
+			} else {
+				otherIssues++
+				fmt.Printf("%s\n", tui.HelpStyle.Render("- "+status.Error+" (optional)"))
+			}
 		}
 	}
 
@@ -310,7 +347,7 @@ func cmdDoctor() {
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		fmt.Println(tui.BannerStyle.Render("✓ Available"))
 	} else {
-		fmt.Println(tui.HelpStyle.Render("- Not detected"))
+		fmt.Println(tui.HelpStyle.Render("- Not detected (optional)"))
 	}
 
 	// Check config file
@@ -324,12 +361,17 @@ func cmdDoctor() {
 	}
 
 	fmt.Println()
-	if allOk {
-		fmt.Println(tui.BannerStyle.Render("  All services healthy!"))
+	if defaultOk {
+		if otherIssues > 0 {
+			fmt.Println(tui.BannerStyle.Render("  Default provider healthy!"))
+			fmt.Println(tui.HelpStyle.Render(fmt.Sprintf("  (%d optional provider(s) not configured)", otherIssues)))
+		} else {
+			fmt.Println(tui.BannerStyle.Render("  All services healthy!"))
+		}
 	} else {
-		fmt.Println(tui.ErrorStyle.Render("  Some services are unreachable."))
+		fmt.Println(tui.ErrorStyle.Render("  Default provider is unreachable."))
 		fmt.Println(tui.HelpStyle.Render("  For local models, start Ollama: ollama serve"))
-		fmt.Println(tui.HelpStyle.Render("  For Docker: docker compose up -d ollama"))
+		fmt.Println(tui.HelpStyle.Render("  Or run: aseity setup"))
 	}
 }
 
@@ -387,4 +429,55 @@ func launchTUI(cfg *config.Config, provName, modelName string) {
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, tui.ErrorStyle.Render("error: "+fmt.Sprintf(format, args...))+"\n")
 	os.Exit(1)
+}
+
+func showHelp() {
+	help := `
+` + tui.BannerStyle.Render("Aseity") + ` - AI coding assistant for your terminal
+
+` + tui.UserLabelStyle.Render("USAGE:") + `
+  aseity [flags]              Start interactive chat
+  aseity <command> [args]     Run a command
+
+` + tui.UserLabelStyle.Render("COMMANDS:") + `
+  models                      List downloaded models
+  pull <model>                Download a model (e.g., deepseek-r1, llama3.2)
+  remove <model>              Remove a downloaded model
+  search <query>              Search HuggingFace for GGUF models
+  providers                   List configured providers
+  doctor                      Check health of all services
+  setup [--docker]            Run first-time setup wizard
+  help                        Show this help
+
+` + tui.UserLabelStyle.Render("FLAGS:") + `
+  --provider <name>           Use specific provider (ollama, openai, anthropic, google)
+  --model <name>              Use specific model
+  --version                   Show version
+  --help, -h                  Show this help
+
+` + tui.UserLabelStyle.Render("EXAMPLES:") + `
+  aseity                      Start chat with default provider (Ollama)
+  aseity --model llama3.2     Start chat with specific model
+  aseity --provider openai    Use OpenAI (requires OPENAI_API_KEY)
+  aseity pull deepseek-r1     Download the deepseek-r1 model
+  aseity doctor               Check if services are running
+
+` + tui.UserLabelStyle.Render("CHAT COMMANDS:") + `
+  /help                       Show available chat commands
+  /clear                      Clear conversation history
+  /compact                    Compress conversation to save tokens
+  /save [path]                Export conversation to markdown
+  /tokens                     Show estimated token usage
+  /quit                       Exit aseity
+
+` + tui.UserLabelStyle.Render("KEYBOARD SHORTCUTS:") + `
+  Enter                       Send message
+  Alt+Enter                   New line in message
+  Ctrl+T                      Toggle thinking visibility
+  Ctrl+C                      Cancel current operation
+  Esc                         Quit
+
+` + tui.HelpStyle.Render("Documentation: https://github.com/PurpleS3Cf0X/aseity") + `
+`
+	fmt.Println(help)
 }
