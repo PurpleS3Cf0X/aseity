@@ -12,7 +12,7 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Multi-provider** — Switch between Ollama, OpenAI, Anthropic, Google, or any OpenAI-compatible API
 - **Interactive TUI** — Beautiful terminal interface with syntax highlighting
 - **Tool use** — Execute shell commands, read/write files, search the web
-- **Sub-agents** — Spawn autonomous agents for parallel tasks
+- **Sub-agents** — Spawn autonomous agents recursively for complex task decomposition
 - **Streaming Output** — Real-time output feedback for long-running commands
 - **Mac Compatible** — Docker setup is now optimized for Apple Silicon
 - **Smart Diff View** — See exactly what changes when files are edited
@@ -44,7 +44,7 @@ aseity
 On first run, Aseity will:
 1. Check if Ollama is installed (offers to install if not)
 2. Start Ollama if it's not running
-3. Download the default model (deepseek-r1)
+3. Download the default model (qwen2.5:3b)
 4. Launch the interactive chat
 
 ## Usage Examples
@@ -52,7 +52,7 @@ On first run, Aseity will:
 ### Basic Chat
 
 ```bash
-# Start with default provider (Ollama) and model (deepseek-r1)
+# Start with default provider (Ollama) and model (qwen2.5:3b)
 aseity
 
 # Use a specific model
@@ -99,6 +99,7 @@ aseity models
 # Pull a new model
 aseity pull llama3.2
 aseity pull codellama:34b
+aseity pull qwen2.5:3b
 aseity pull deepseek-r1
 
 # Search HuggingFace for models
@@ -128,7 +129,7 @@ Create `~/.config/aseity/config.yaml`:
 ```yaml
 # Default provider and model
 default_provider: ollama
-default_model: deepseek-r1
+default_model: qwen2.5:3b
 
 # Provider configurations
 providers:
@@ -197,7 +198,7 @@ Aseity can use these tools to help you:
 | `file_search` | Find files by pattern or content | No |
 | `web_search` | Search the web via DuckDuckGo | No |
 | `web_fetch` | Fetch and read web pages | No |
-| `spawn_agent` | Create a sub-agent for complex tasks | Yes |
+| `spawn_agent` | Create a sub-agent (supports recursive delegation) | Yes |
 | `list_agents` | List running sub-agents | No |
 
 ## Keyboard Shortcuts
@@ -221,7 +222,7 @@ Best for: Privacy, offline use, no API costs
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Pull a model
-ollama pull deepseek-r1
+ollama pull qwen2.5:3b
 
 # Run Aseity
 aseity
@@ -287,7 +288,7 @@ aseity setup
 Pull the model first:
 
 ```bash
-aseity pull deepseek-r1
+aseity pull qwen2.5:3b
 ```
 
 ### Check service status
