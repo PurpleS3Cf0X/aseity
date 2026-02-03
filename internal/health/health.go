@@ -159,7 +159,9 @@ func CheckModel(ctx context.Context, providerType, baseURL, apiKey, modelName st
 		return nil // endpoint doesn't list models, skip check
 	}
 	for _, m := range status.Models {
-		if m == modelName {
+		// Match "deepseek-r1" against "deepseek-r1:latest", etc.
+		// Ollama returns models with tags, but users typically specify without tag
+		if m == modelName || strings.HasPrefix(m, modelName+":") {
 			return nil
 		}
 	}

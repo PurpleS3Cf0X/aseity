@@ -86,14 +86,6 @@ func main() {
 		modelName = cfg.DefaultModel
 	}
 
-	prov, err := makeProvider(cfg, provName, modelName)
-	if err != nil {
-		fatal("%s", err)
-	}
-
-	// Wrap provider with retry logic
-	prov = provider.WithRetry(prov, 3)
-
 	// Startup health check: verify provider is reachable
 	fmt.Print(tui.GradientBanner())
 	fmt.Printf("\n  %s  %s\n",
@@ -142,29 +134,7 @@ func main() {
 	}
 	fmt.Println()
 
-	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove)
-	tools.RegisterDefaults(toolReg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
-
-	// Set up agent manager and register agent tools
-	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
-	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
-	toolReg.Register(tools.NewListAgentsTool(agentMgr))
-
-	// Periodic agent cleanup (every 10 minutes, remove agents older than 30 min)
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			agentMgr.Cleanup(30 * time.Minute)
-		}
-	}()
-
-	m := tui.NewModel(prov, toolReg, provName, modelName)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		fatal("TUI error: %s", err)
-	}
+	launchTUI(cfg, provName, modelName)
 }
 
 func makeProvider(cfg *config.Config, name, modelName string) (provider.Provider, error) {
@@ -374,10 +344,43 @@ func cmdSetup(docker bool) {
 	} else {
 		ok = setup.RunSetup(cfg.DefaultProvider, modelName)
 	}
-	if ok {
-		fmt.Println(tui.BannerStyle.Render("\n  Ready! Run 'aseity' to start chatting.\n"))
-	} else {
+	if !ok {
 		os.Exit(1)
+	}
+
+	// Setup succeeded — launch the TUI directly instead of asking user to run again
+	fmt.Println()
+	launchTUI(cfg, cfg.DefaultProvider, modelName)
+}
+
+// launchTUI starts the interactive chat interface
+func launchTUI(cfg *config.Config, provName, modelName string) {
+	prov, err := makeProvider(cfg, provName, modelName)
+	if err != nil {
+		fatal("%s", err)
+	}
+	prov = provider.WithRetry(prov, 3)
+
+	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove)
+	tools.RegisterDefaults(toolReg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
+
+	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
+	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
+	toolReg.Register(tools.NewListAgentsTool(agentMgr))
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			agentMgr.Cleanup(30 * time.Minute)
+		}
+	}()
+
+	m := tui.NewModel(prov, toolReg, provName, modelName)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	if _, err := p.Run(); err != nil {
+		fatal("TUI error: %s", err)
 	}
 }
 
