@@ -16,6 +16,7 @@ type BashTool struct {
 	AllowedCommands    []string
 	DisallowedCommands []string
 	inputCh            chan string
+	reqInputFn         func()
 }
 
 type bashArgs struct {
@@ -31,6 +32,10 @@ func (b *BashTool) NeedsConfirmation() bool { return true }
 
 func (b *BashTool) SetInputChan(ch chan string) {
 	b.inputCh = ch
+}
+
+func (b *BashTool) SetInputRequestCallback(fn func()) {
+	b.reqInputFn = fn
 }
 
 func (b *BashTool) Parameters() any {
@@ -102,39 +107,20 @@ func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback f
 				trimmed := strings.TrimSpace(chunk)
 				if isPrompt(trimmed) {
 					// Request input if we have a channel
-					if b.inputCh != nil {
-						// Signal Agent that we need input (via callback hack or if Agent Event type allowed)
-						// The callback currently accepts string.
-						// We need to send a SPECIAL signal.
-						// To avoid changing callback signature, we can send a specially formatted string?
-						// Better: The Agent's stream loop interprets "EventInputRequest" if we could send events.
-						// But 'callback' is just func(string).
-						// Wait, current design in agent.go passes `events <- Event{...}` inside the callback wrapper.
-						// So we can't change the EventType there easily.
+					if b.reqInputFn != nil && b.inputCh != nil {
+						b.reqInputFn() // Notify Agent -> TUI
 
-						// Workaround: We block here, but we can't signal the UI easily without changing interface.
-						// UNLESS we use a side channel?
-						// Actually, the user asked for "EventInputRequest".
-						// Let's modify agent.go to accept "input_request" marker? No, ugly.
-
-						// Let's rely on the fact that if we just print the prompt, the user sees it.
-						// But the UI needs to know to *enable input*.
-						// Since we can't emit EventInputRequest directly from here through the callback (it wraps EventToolOutput),
-						// We might need to assume the TUI monitors output? No.
-
-						// Let's fix the architecture properly:
-						// The proper solution is to let the tool emit Events.
-						// But for now, since I can't change `ExecuteStream` signature easily without breaking everything:
-						// I will send a special Sentinel String that `agent.go` parsing logic could capture?
-						// No, `streamCallback` in `agent.go`:
-						// streamCallback := func(chunk string) { events <- Event{Type: EventToolOutput, Text: chunk} }
-
-						// HACK: I will modify `agent.go` streamCallback to detect a magic string? No.
-						// Better: `BashTool` should have `SetEventChan(chan agent.Event)`.
-						// But `agent` package imports `tools`. `tools` cannot import `agent` -> Cycle.
-
-						// SOLUTION: Use `SetInputRequestCallback(func())`.
-						// Agent injects a callback that sends `EventInputRequest`.
+						// Block waiting for user input
+						select {
+						case input := <-b.inputCh:
+							// Send input to PTY
+							input = strings.TrimSpace(input) + "\n"
+							if _, err := ptmx.Write([]byte(input)); err != nil {
+								// Ignore write error
+							}
+						case <-ctx.Done():
+							return Result{Output: outputBuf.String(), Error: "timeout awaiting input"}, nil
+						}
 					}
 				}
 			}
