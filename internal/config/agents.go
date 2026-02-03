@@ -83,3 +83,17 @@ func ListAgents() ([]string, error) {
 	}
 	return names, nil
 }
+
+func DeleteAgentConfig(name string) error {
+	dir, err := GetAgentsDir()
+	if err != nil {
+		return err
+	}
+
+	filename := filepath.Join(dir, name+".yaml")
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return fmt.Errorf("agent '%s' not found", name)
+	}
+
+	return os.Remove(filename)
+}

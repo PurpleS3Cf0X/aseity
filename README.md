@@ -167,6 +167,28 @@ The main agent will delegate the task, wait for the sub-agent to finish, and pre
 - **Smart Truncation**: If a tool (like `nmap` or `grep`) produces thousands of lines, Aseity automatically saves the **full output** to a temp file and only shows a preview to the agent to prevent context overflow.
 
 
+### Custom Agents (New in v1.1.0)
+You can create persistent agent personas that know exactly how you like to work.
+
+**Creating an Agent:**
+Just tell Aseity what you want.
+```bash
+> Create a 'LinuxExpert' agent that specializes in bash scripting and system administration.
+```
+Aseity will ask you for details if needed and save the agent to `~/.config/aseity/agents/LinuxExpert.yaml`.
+
+**Using an Agent:**
+Spawn it by name for specific tasks:
+```bash
+> Ask LinuxExpert to audit my ssh configuration.
+```
+
+**Deleting an Agent:**
+You can ask Aseity to delete it:
+```bash
+> Delete the LinuxExpert agent.
+```
+
 ## Configuration
 
 Create `~/.config/aseity/config.yaml`:

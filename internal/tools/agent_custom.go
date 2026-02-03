@@ -69,3 +69,49 @@ func (c *CreateAgentTool) Execute(ctx context.Context, rawArgs string) (Result, 
 
 	return Result{Output: fmt.Sprintf("Successfully created agent '%s'. You can now spawn it by asking to 'spawn agent %s'.", args.Name, args.Name)}, nil
 }
+
+type DeleteAgentTool struct{}
+
+func NewDeleteAgentTool() *DeleteAgentTool {
+	return &DeleteAgentTool{}
+}
+
+func (d *DeleteAgentTool) Name() string            { return "delete_agent" }
+func (d *DeleteAgentTool) NeedsConfirmation() bool { return true }
+func (d *DeleteAgentTool) Description() string {
+	return "Delete a custom agent persona configuration file."
+}
+
+func (d *DeleteAgentTool) Parameters() any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "Name of the agent to delete.",
+			},
+		},
+		"required": []string{"name"},
+	}
+}
+
+type deleteAgentArgs struct {
+	Name string `json:"name"`
+}
+
+func (d *DeleteAgentTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
+	var args deleteAgentArgs
+	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
+		return Result{Error: "invalid arguments: " + err.Error()}, nil
+	}
+
+	if args.Name == "" {
+		return Result{Error: "name is required"}, nil
+	}
+
+	if err := config.DeleteAgentConfig(args.Name); err != nil {
+		return Result{Error: fmt.Sprintf("failed to delete agent: %v", err)}, nil
+	}
+
+	return Result{Output: fmt.Sprintf("Successfully deleted agent '%s'.", args.Name)}, nil
+}
