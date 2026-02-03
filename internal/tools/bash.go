@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -105,9 +106,20 @@ func (b *BashTool) ExecuteStream(ctx context.Context, rawArgs string, callback f
 	}
 	output = strings.TrimSpace(output)
 
-	// Truncate very large outputs
-	if len(output) > 50000 {
-		output = output[:50000] + "\n... [output truncated at 50000 chars]"
+	// Smart Truncation
+	// If output is too large for context window, save to file and truncate
+	const MaxOutputChars = 2000
+	if len(output) > MaxOutputChars {
+		// Create temp file
+		tmpFile, err := os.CreateTemp("", "aseity_output_*.txt")
+		if err == nil {
+			defer tmpFile.Close()
+			if _, err := tmpFile.WriteString(output); err == nil {
+				truncated := output[:MaxOutputChars]
+				output = fmt.Sprintf("%s\n\n... [Output too large (%d chars). Full output saved to %s. Use 'file_read' to view it.]",
+					truncated, len(output), tmpFile.Name())
+			}
+		}
 	}
 
 	if err != nil {
