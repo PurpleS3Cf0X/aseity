@@ -15,6 +15,7 @@ import (
 	"github.com/jeanpaul/aseity/internal/health"
 	"github.com/jeanpaul/aseity/internal/model"
 	"github.com/jeanpaul/aseity/internal/provider"
+	"github.com/jeanpaul/aseity/internal/setup"
 	"github.com/jeanpaul/aseity/internal/tools"
 	"github.com/jeanpaul/aseity/internal/tui"
 	"github.com/jeanpaul/aseity/pkg/version"
@@ -63,6 +64,10 @@ func main() {
 		case "doctor":
 			cmdDoctor()
 			return
+		case "setup":
+			docker := len(args) > 1 && args[1] == "--docker"
+			cmdSetup(docker)
+			return
 		}
 	}
 
@@ -86,6 +91,9 @@ func main() {
 		fatal("%s", err)
 	}
 
+	// Wrap provider with retry logic
+	prov = provider.WithRetry(prov, 3)
+
 	// Startup health check: verify provider is reachable
 	fmt.Print(tui.BannerStyle.Render(tui.Banner))
 	fmt.Printf("\n  %s  %s\n",
@@ -98,29 +106,58 @@ func main() {
 	status := health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
 	if !status.Reachable {
 		fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ "+status.Error))
-		fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Run 'aseity doctor' for diagnostics"))
-		os.Exit(1)
+
+		// Launch setup wizard instead of just exiting
+		if setup.RunSetup(provName, modelName) {
+			// Retry health check after setup
+			status = health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
+		}
+		if !status.Reachable {
+			fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Run 'aseity doctor' for diagnostics or 'aseity setup' to retry"))
+			os.Exit(1)
+		}
 	}
-	fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
+	if status.Reachable {
+		fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
+	}
 
 	// Check if model is available
 	if pcfg.Type == "openai" {
 		if err := health.CheckModel(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey, modelName); err != nil {
 			fmt.Printf("  %s\n", tui.ErrorStyle.Render("✗ "+err.Error()))
-			fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it with: aseity pull "+modelName))
-			os.Exit(1)
+			// Try to pull the model automatically
+			if setup.IsOllamaRunning() {
+				fmt.Println()
+				if err := setup.PullModel(modelName); err != nil {
+					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it manually: aseity pull "+modelName))
+					os.Exit(1)
+				}
+			} else {
+				fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Pull it with: aseity pull "+modelName))
+				os.Exit(1)
+			}
+		} else {
+			fmt.Printf("  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" available"))
 		}
-		fmt.Printf("  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" available"))
 	}
 	fmt.Println()
 
 	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove)
-	tools.RegisterDefaults(toolReg)
+	tools.RegisterDefaults(toolReg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
 
 	// Set up agent manager and register agent tools
 	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
 	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
 	toolReg.Register(tools.NewListAgentsTool(agentMgr))
+
+	// Periodic agent cleanup (every 10 minutes, remove agents older than 30 min)
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			agentMgr.Cleanup(30 * time.Minute)
+		}
+	}()
 
 	m := tui.NewModel(prov, toolReg, provName, modelName)
 	p := tea.NewProgram(m, tea.WithAltScreen())
@@ -234,6 +271,10 @@ func cmdSearch(query string) {
 	if err != nil {
 		fatal("search failed: %s", err)
 	}
+	if len(models) == 0 {
+		fmt.Println(tui.HelpStyle.Render("  No models found"))
+		return
+	}
 	fmt.Println(tui.BannerStyle.Render("  HuggingFace Models (GGUF)"))
 	fmt.Println()
 	for _, m := range models {
@@ -319,6 +360,24 @@ func cmdDoctor() {
 		fmt.Println(tui.ErrorStyle.Render("  Some services are unreachable."))
 		fmt.Println(tui.HelpStyle.Render("  For local models, start Ollama: ollama serve"))
 		fmt.Println(tui.HelpStyle.Render("  For Docker: docker compose up -d ollama"))
+	}
+}
+
+func cmdSetup(docker bool) {
+	cfg, _ := config.Load()
+	modelName := cfg.DefaultModel
+	fmt.Print(tui.BannerStyle.Render(tui.Banner))
+
+	var ok bool
+	if docker {
+		ok = setup.RunSetupDocker(modelName)
+	} else {
+		ok = setup.RunSetup(cfg.DefaultProvider, modelName)
+	}
+	if ok {
+		fmt.Println(tui.BannerStyle.Render("\n  Ready! Run 'aseity' to start chatting.\n"))
+	} else {
+		os.Exit(1)
 	}
 }
 

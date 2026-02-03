@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +16,8 @@ type Config struct {
 	Providers       map[string]ProviderConfig `yaml:"providers"`
 	Tools           ToolsConfig               `yaml:"tools"`
 	Theme           string                    `yaml:"theme"`
+	MaxTurns        int                       `yaml:"max_turns"`
+	MaxTokens       int                       `yaml:"max_tokens"`
 }
 
 type ProviderConfig struct {
@@ -45,8 +48,10 @@ func expandEnv(s string) string {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider: "ollama",
-		DefaultModel:    "llama3.2",
+		DefaultModel:    "deepseek-r1",
 		Theme:           "green",
+		MaxTurns:        50,
+		MaxTokens:       100000,
 		Providers: map[string]ProviderConfig{
 			"ollama": {Type: "openai", BaseURL: "http://localhost:11434/v1"},
 			"vllm":   {Type: "openai", BaseURL: "http://localhost:8000/v1"},
@@ -82,10 +87,45 @@ func Load() (*Config, error) {
 		p.BaseURL = expandEnv(p.BaseURL)
 		cfg.Providers[name] = p
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
 func (c *Config) ProviderFor(name string) (ProviderConfig, bool) {
 	p, ok := c.Providers[name]
 	return p, ok
+}
+
+// Validate checks the configuration for errors.
+func (c *Config) Validate() error {
+	if c.DefaultProvider == "" {
+		return fmt.Errorf("config: default_provider is required")
+	}
+	if _, ok := c.Providers[c.DefaultProvider]; !ok {
+		return fmt.Errorf("config: default_provider %q not found in providers", c.DefaultProvider)
+	}
+	for name, p := range c.Providers {
+		validTypes := map[string]bool{"openai": true, "anthropic": true, "google": true}
+		if !validTypes[p.Type] {
+			return fmt.Errorf("config: provider %q has invalid type %q (must be openai, anthropic, or google)", name, p.Type)
+		}
+		if p.Type == "openai" && p.BaseURL == "" {
+			return fmt.Errorf("config: provider %q (type openai) requires base_url", name)
+		}
+		if p.Type == "anthropic" && p.APIKey == "" {
+			return fmt.Errorf("config: provider %q (type anthropic) requires api_key", name)
+		}
+		if p.Type == "google" && p.APIKey == "" {
+			return fmt.Errorf("config: provider %q (type google) requires api_key", name)
+		}
+	}
+	if c.MaxTurns < 1 {
+		c.MaxTurns = 50
+	}
+	if c.MaxTokens < 1 {
+		c.MaxTokens = 100000
+	}
+	return nil
 }

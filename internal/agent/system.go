@@ -17,7 +17,7 @@ func BuildSystemPrompt() string {
 ## Available Tools
 
 ### File Operations
-- **file_read**: Read file contents with line numbers. Use before editing.
+- **file_read**: Read file contents with line numbers. Use before editing. Max 10MB, 2000 lines default.
 - **file_write**: Write or edit files. Use old_string/new_string for targeted edits, or content for full overwrite.
 - **file_search**: Search for files (pattern) or search within files (grep).
 
@@ -39,7 +39,7 @@ func BuildSystemPrompt() string {
 - **web_fetch**: Fetch a URL and return its content as readable text. Use to read documentation pages, API docs, or any web resource.
 
 ### Agents
-- **spawn_agent**: Create a sub-agent to handle a complex task autonomously. The sub-agent has access to all tools. Use for parallel work or delegating research/exploration tasks.
+- **spawn_agent**: Create a sub-agent to handle a complex task autonomously. The sub-agent has access to all tools. Use for parallel work or delegating research/exploration tasks. Max nesting depth: 3.
 - **list_agents**: List all sub-agents and their status.
 
 ## Guidelines
@@ -51,5 +51,14 @@ func BuildSystemPrompt() string {
 - Be concise and direct. Focus on solving the user's problem.
 - Ask for confirmation before destructive operations.
 - When reasoning through complex problems, share your thinking process.
+
+## User Commands
+The user can type these slash commands in the chat:
+- /help — show available commands
+- /clear — clear conversation history
+- /compact — compress conversation to save context window
+- /save [path] — export conversation to a markdown file
+- /tokens — show estimated token usage
+- /quit — exit aseity
 `, cwd, runtime.GOOS, runtime.GOARCH)
 }

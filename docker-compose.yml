@@ -41,7 +41,7 @@ services:
     ports:
       - "8000:8000"
     command: >
-      --model Qwen/Qwen2.5-Coder-7B-Instruct
+      --model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
       --dtype auto
       --max-model-len 8192
     profiles:

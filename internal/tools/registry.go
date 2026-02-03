@@ -60,8 +60,12 @@ func (r *Registry) NeedsConfirmation(name string) bool {
 	return t.NeedsConfirmation()
 }
 
-func RegisterDefaults(r *Registry) {
-	r.Register(&BashTool{})
+// RegisterDefaults registers all built-in tools. Pass command lists from config.
+func RegisterDefaults(r *Registry, allowedCmds, disallowedCmds []string) {
+	r.Register(&BashTool{
+		AllowedCommands:    allowedCmds,
+		DisallowedCommands: disallowedCmds,
+	})
 	r.Register(&FileReadTool{})
 	r.Register(&FileWriteTool{})
 	r.Register(&FileSearchTool{})

@@ -15,7 +15,7 @@ var (
 	DarkGray    = lipgloss.Color("#1a1a2e")
 	MidGray     = lipgloss.Color("#3a3a4e")
 	LightGray   = lipgloss.Color("#aaaaaa")
-	White       = lipgloss.Color("#e0e0e0")
+	White       = lipgloss.Color("#FFFFFF")
 
 	// Status bar
 	StatusBarStyle = lipgloss.NewStyle().
@@ -30,13 +30,17 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	// User messages
+	// Token counter in status bar
+	TokenStyle = lipgloss.NewStyle().
+			Foreground(DimGreen)
+
+	// User messages — WHITE font as requested
 	UserLabelStyle = lipgloss.NewStyle().
 			Foreground(BrightGreen).
 			Bold(true)
 
 	UserMsgStyle = lipgloss.NewStyle().
-			Foreground(Green)
+			Foreground(White)
 
 	// Assistant messages
 	AssistantLabelStyle = lipgloss.NewStyle().
@@ -118,6 +122,11 @@ var (
 	// Sub-agent activity
 	SubAgentStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#00AA77")).
+			Italic(true)
+
+	// Slash command feedback
+	SystemMsgStyle = lipgloss.NewStyle().
+			Foreground(MedGreen).
 			Italic(true)
 )
 

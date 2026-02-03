@@ -10,6 +10,8 @@ import (
 	"github.com/jeanpaul/aseity/internal/tools"
 )
 
+const MaxTurns = 50 // prevent infinite agent loops
+
 type Event struct {
 	Type     EventType
 	Text     string
@@ -33,13 +35,13 @@ const (
 	EventError
 )
 
-// ConfirmChan is used by the agent to ask the TUI for approval.
-// The agent sends a confirm request event, then blocks reading from this channel.
+// Agent drives the think-act-observe loop.
 type Agent struct {
-	prov       provider.Provider
-	tools      *tools.Registry
-	conv       *Conversation
-	ConfirmCh  chan bool // TUI sends true/false here
+	prov      provider.Provider
+	tools     *tools.Registry
+	conv      *Conversation
+	ConfirmCh chan bool // TUI sends true/false here
+	depth     int      // sub-agent nesting depth
 }
 
 func New(prov provider.Provider, registry *tools.Registry) *Agent {
@@ -53,13 +55,23 @@ func New(prov provider.Provider, registry *tools.Registry) *Agent {
 	}
 }
 
+// NewWithDepth creates a sub-agent with nesting depth tracking.
+func NewWithDepth(prov provider.Provider, registry *tools.Registry, depth int) *Agent {
+	a := New(prov, registry)
+	a.depth = depth
+	return a
+}
+
+func (a *Agent) Conversation() *Conversation { return a.conv }
+func (a *Agent) Depth() int                  { return a.depth }
+
 func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 	a.conv.AddUser(userMsg)
 	a.runLoop(ctx, events)
 }
 
 func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
-	for {
+	for turn := 0; turn < MaxTurns; turn++ {
 		stream, err := a.prov.Chat(ctx, a.conv.Messages(), a.tools.ToolDefs())
 		if err != nil {
 			events <- Event{Type: EventError, Error: err.Error(), Done: true}
@@ -97,7 +109,6 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 		for _, tc := range toolCalls {
 			prettyArgs := formatToolArgs(tc.Name, tc.Args)
 
-			// Send the tool call event (shows what's about to run)
 			events <- Event{
 				Type: EventToolCall, ToolName: tc.Name,
 				ToolArgs: prettyArgs, ToolID: tc.ID,
@@ -110,7 +121,6 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 					ToolArgs: prettyArgs, ToolID: tc.ID,
 				}
 
-				// Block until TUI responds
 				select {
 				case approved := <-a.ConfirmCh:
 					if !approved {
@@ -144,6 +154,8 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 			}
 		}
 	}
+
+	events <- Event{Type: EventError, Error: fmt.Sprintf("reached maximum of %d turns — stopping to prevent infinite loop", MaxTurns), Done: true}
 }
 
 func formatToolArgs(toolName, rawArgs string) string {

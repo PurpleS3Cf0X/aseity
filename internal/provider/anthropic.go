@@ -131,7 +131,7 @@ func (a *AnthropicProvider) Chat(ctx context.Context, msgs []Message, tools []To
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("anthropic returned %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("anthropic: %s", parseProviderError("anthropic", resp.StatusCode, b))
 	}
 
 	ch := make(chan StreamChunk, 64)

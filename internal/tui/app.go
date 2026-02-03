@@ -51,7 +51,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	ta.CharLimit = 0
 	ta.SetHeight(3)
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.FocusedStyle.Base = lipgloss.NewStyle().Foreground(Green)
+	ta.FocusedStyle.Base = lipgloss.NewStyle().Foreground(White)
 	ta.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(DimGreen)
 	ta.BlurredStyle.Base = lipgloss.NewStyle().Foreground(DarkGreen)
 
@@ -118,6 +118,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Type {
 		case tea.KeyEsc:
+			// Save session on exit
+			m.agent.Conversation().Save()
 			m.cancel()
 			return m, tea.Quit
 		case tea.KeyCtrlC:
@@ -131,6 +133,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuildView()
 				return m, nil
 			}
+			m.agent.Conversation().Save()
 			m.cancel()
 			return m, tea.Quit
 		case tea.KeyCtrlT:
@@ -146,6 +149,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.textarea.Reset()
+
+			// Handle slash commands
+			if strings.HasPrefix(text, "/") {
+				return m.handleSlashCommand(text)
+			}
+
 			m.messages = append(m.messages, chatMessage{role: "user", content: text})
 			m.thinking = true
 			m.rebuildView()
@@ -229,6 +238,73 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// handleSlashCommand processes /commands entered by the user.
+func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
+	parts := strings.Fields(text)
+	cmd := parts[0]
+
+	switch cmd {
+	case "/help":
+		m.messages = append(m.messages, chatMessage{
+			role: "system",
+			content: `  Available commands:
+    /help     — show this help
+    /clear    — clear conversation history
+    /compact  — compress conversation to save context
+    /save     — export conversation to markdown file
+    /tokens   — show estimated token usage
+    /quit     — exit aseity`,
+		})
+
+	case "/clear":
+		m.agent.Conversation().Clear()
+		m.messages = nil
+		m.messages = append(m.messages, chatMessage{role: "system", content: "  Conversation cleared."})
+
+	case "/compact":
+		before := m.agent.Conversation().EstimatedTokens()
+		m.agent.Conversation().Compact()
+		after := m.agent.Conversation().EstimatedTokens()
+		m.messages = append(m.messages, chatMessage{
+			role:    "system",
+			content: fmt.Sprintf("  Compacted: ~%dk -> ~%dk tokens", before/1000, after/1000),
+		})
+
+	case "/save":
+		path := "aseity-session.md"
+		if len(parts) > 1 {
+			path = parts[1]
+		}
+		if err := m.agent.Conversation().Export(path); err != nil {
+			m.messages = append(m.messages, chatMessage{role: "error", content: err.Error()})
+		} else {
+			m.messages = append(m.messages, chatMessage{role: "system", content: "  Saved to " + path})
+		}
+
+	case "/tokens":
+		tokens := m.agent.Conversation().EstimatedTokens()
+		msgCount := m.agent.Conversation().Len()
+		m.messages = append(m.messages, chatMessage{
+			role:    "system",
+			content: fmt.Sprintf("  ~%dk tokens, %d messages", tokens/1000, msgCount),
+		})
+
+	case "/quit":
+		m.agent.Conversation().Save()
+		m.cancel()
+		return *m, tea.Quit
+
+	default:
+		m.messages = append(m.messages, chatMessage{
+			role:    "error",
+			content: fmt.Sprintf("Unknown command: %s (type /help for available commands)", cmd),
+		})
+	}
+
+	m.rebuildView()
+	return *m, nil
 }
 
 func (m *Model) waitForEvent() tea.Cmd {
@@ -318,7 +394,7 @@ func (m *Model) rebuildView() {
 		case "error":
 			sb.WriteString(ErrorStyle.Render("  Error: "+msg.content) + "\n\n")
 		case "system":
-			sb.WriteString(HelpStyle.Render(msg.content) + "\n\n")
+			sb.WriteString(SystemMsgStyle.Render(msg.content) + "\n\n")
 		case "subagent":
 			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
 		}
@@ -335,10 +411,21 @@ func (m Model) View() string {
 	if m.showThinking {
 		thinkLabel = " [thinking:on]"
 	}
+
+	// Token counter
+	tokenInfo := ""
+	if m.agent != nil {
+		tokens := m.agent.Conversation().EstimatedTokens()
+		if tokens > 0 {
+			tokenInfo = fmt.Sprintf(" ~%dk", tokens/1000)
+		}
+	}
+
 	header := StatusProviderStyle.Render(" "+m.providerName) +
 		StatusBarStyle.Render(" "+m.modelName+" ") +
-		StatusBarStyle.Copy().Width(m.width-lipgloss.Width(m.providerName)-lipgloss.Width(m.modelName)-6-len(thinkLabel)).
+		StatusBarStyle.Copy().Width(m.width-lipgloss.Width(m.providerName)-lipgloss.Width(m.modelName)-6-len(thinkLabel)-len(tokenInfo)).
 			Render("aseity") +
+		TokenStyle.Render(tokenInfo) +
 		HelpStyle.Render(thinkLabel)
 	separator := SeparatorStyle.Render(strings.Repeat("─", m.width))
 
@@ -354,7 +441,7 @@ func (m Model) View() string {
 	if m.confirming {
 		help = ConfirmStyle.Render("  y:approve  n:deny  Ctrl+C:cancel")
 	} else {
-		help = HelpStyle.Render("  Enter:send  Alt+Enter:newline  Ctrl+T:thinking  Ctrl+C:cancel  Esc:quit")
+		help = HelpStyle.Render("  Enter:send  Alt+Enter:newline  Ctrl+T:thinking  Ctrl+C:cancel  Esc:quit  /help")
 	}
 
 	return header + "\n" + separator + "\n" + m.viewport.View() + "\n" + input + "\n" + help

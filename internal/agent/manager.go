@@ -6,11 +6,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
 	"github.com/jeanpaul/aseity/internal/types"
 )
+
+const MaxAgentDepth = 3 // prevent circular/recursive agent spawning
 
 type subAgentStatus int
 
@@ -22,11 +25,13 @@ const (
 )
 
 type subAgentInfo struct {
-	id     int
-	task   string
-	status subAgentStatus
-	output string
-	cancel context.CancelFunc
+	id        int
+	task      string
+	status    subAgentStatus
+	output    string
+	cancel    context.CancelFunc
+	createdAt time.Time
+	depth     int
 }
 
 // AgentManager implements types.AgentSpawner.
@@ -37,6 +42,7 @@ type AgentManager struct {
 	maxConc int
 	prov    provider.Provider
 	toolReg *tools.Registry
+	depth   int // current nesting depth
 }
 
 func NewAgentManager(prov provider.Provider, toolReg *tools.Registry, maxConcurrent int) *AgentManager {
@@ -51,7 +57,19 @@ func NewAgentManager(prov provider.Provider, toolReg *tools.Registry, maxConcurr
 	}
 }
 
+// NewAgentManagerWithDepth creates a manager that tracks nesting depth.
+func NewAgentManagerWithDepth(prov provider.Provider, toolReg *tools.Registry, maxConcurrent, depth int) *AgentManager {
+	am := NewAgentManager(prov, toolReg, maxConcurrent)
+	am.depth = depth
+	return am
+}
+
 func (am *AgentManager) Spawn(ctx context.Context, task string) (int, error) {
+	// Check nesting depth
+	if am.depth >= MaxAgentDepth {
+		return 0, fmt.Errorf("maximum agent nesting depth (%d) reached — cannot spawn sub-agent", MaxAgentDepth)
+	}
+
 	am.mu.Lock()
 	running := 0
 	for _, a := range am.agents {
@@ -68,16 +86,18 @@ func (am *AgentManager) Spawn(ctx context.Context, task string) (int, error) {
 	subCtx, cancel := context.WithCancel(ctx)
 
 	info := &subAgentInfo{
-		id:     id,
-		task:   task,
-		status: subAgentRunning,
-		cancel: cancel,
+		id:        id,
+		task:      task,
+		status:    subAgentRunning,
+		cancel:    cancel,
+		createdAt: time.Now(),
+		depth:     am.depth + 1,
 	}
 	am.agents[id] = info
 	am.mu.Unlock()
 
 	go func() {
-		ag := New(am.prov, am.toolReg)
+		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1)
 		// Sub-agents auto-approve all tools
 		go func() {
 			for {
@@ -158,6 +178,21 @@ func (am *AgentManager) Get(id int) (types.AgentInfo, bool) {
 		Status: am.statusString(info.status),
 		Output: info.output,
 	}, true
+}
+
+// Cleanup removes completed/failed/cancelled agents older than the given duration.
+func (am *AgentManager) Cleanup(maxAge time.Duration) int {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	removed := 0
+	cutoff := time.Now().Add(-maxAge)
+	for id, a := range am.agents {
+		if a.status != subAgentRunning && a.createdAt.Before(cutoff) {
+			delete(am.agents, id)
+			removed++
+		}
+	}
+	return removed
 }
 
 func (am *AgentManager) statusString(s subAgentStatus) string {

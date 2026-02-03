@@ -150,7 +150,7 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("provider %s returned %d: %s", o.name, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("provider %s: %s", o.name, parseProviderError(o.name, resp.StatusCode, body))
 	}
 
 	ch := make(chan StreamChunk, 64)

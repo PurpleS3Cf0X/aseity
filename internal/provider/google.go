@@ -31,9 +31,9 @@ func (g *GoogleProvider) Models(_ context.Context) ([]string, error) {
 }
 
 type geminiRequest struct {
-	Contents         []geminiContent `json:"contents"`
-	SystemInstruction *geminiContent `json:"systemInstruction,omitempty"`
-	Tools            []geminiTool    `json:"tools,omitempty"`
+	Contents          []geminiContent `json:"contents"`
+	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
+	Tools             []geminiTool    `json:"tools,omitempty"`
 }
 
 type geminiContent struct {
@@ -42,9 +42,9 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text             string          `json:"text,omitempty"`
-	FunctionCall     *geminiFnCall   `json:"functionCall,omitempty"`
-	FunctionResponse *geminiFnResp   `json:"functionResponse,omitempty"`
+	Text             string        `json:"text,omitempty"`
+	FunctionCall     *geminiFnCall `json:"functionCall,omitempty"`
+	FunctionResponse *geminiFnResp `json:"functionResponse,omitempty"`
 }
 
 type geminiFnCall struct {
@@ -111,21 +111,23 @@ func (g *GoogleProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 	body := geminiRequest{Contents: contents, SystemInstruction: sysInstruction, Tools: gemTools}
 	payload, _ := json.Marshal(body)
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse&key=%s", g.model, g.apiKey)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	// Use header for API key instead of URL parameter
+	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse", g.model)
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.apiKey)
 
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("google API error: %s", friendlyProviderError(err))
 	}
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("google returned %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("google returned %d: %s", resp.StatusCode, parseProviderError("google", resp.StatusCode, b))
 	}
 
 	ch := make(chan StreamChunk, 64)
