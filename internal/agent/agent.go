@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
@@ -47,9 +49,12 @@ type Agent struct {
 	depth     int         // sub-agent nesting depth
 }
 
-func New(prov provider.Provider, registry *tools.Registry) *Agent {
+func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) *Agent {
 	conv := NewConversation()
-	conv.AddSystem(BuildSystemPrompt())
+	if systemPrompt == "" {
+		systemPrompt = BuildSystemPrompt()
+	}
+	conv.AddSystem(systemPrompt)
 	return &Agent{
 		prov:      prov,
 		tools:     registry,
@@ -60,8 +65,8 @@ func New(prov provider.Provider, registry *tools.Registry) *Agent {
 }
 
 // NewWithDepth creates a sub-agent with nesting depth tracking.
-func NewWithDepth(prov provider.Provider, registry *tools.Registry, depth int) *Agent {
-	a := New(prov, registry)
+func NewWithDepth(prov provider.Provider, registry *tools.Registry, depth int, systemPrompt string) *Agent {
+	a := New(prov, registry, systemPrompt)
 	a.depth = depth
 	return a
 }
@@ -111,6 +116,30 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 
 		assistantText := textBuf.String()
 		a.conv.AddAssistant(assistantText, toolCalls)
+
+		// FALLBACK: If no native tool calls, check for text-based pattern [TOOL:name|json_args]
+		if len(toolCalls) == 0 {
+			// Regex to capture: [TOOL:name|args]
+			// We handle nested braces loosely or just take until the last ] on the line if simple
+			// For robustness, let's assume one tool per line or block.
+			// Format: `[TOOL:<name>|<args>]`
+			re := regexp.MustCompile(`\[TOOL:(\w+)\|(.+?)\]`)
+			matches := re.FindAllStringSubmatch(assistantText, -1)
+
+			for _, match := range matches {
+				if len(match) == 3 {
+					toolName := match[1]
+					toolArgs := match[2]
+					// Basic JSON validation/cleanup if needed?
+					// Ideally the model produces valid JSON.
+					toolCalls = append(toolCalls, provider.ToolCall{
+						ID:   fmt.Sprintf("fallback-%d", time.Now().UnixNano()),
+						Name: toolName,
+						Args: toolArgs,
+					})
+				}
+			}
+		}
 
 		if len(toolCalls) == 0 {
 			events <- Event{Type: EventDone, Done: true}

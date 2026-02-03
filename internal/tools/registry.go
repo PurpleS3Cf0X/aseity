@@ -82,4 +82,5 @@ func RegisterDefaults(r *Registry, allowedCmds, disallowedCmds []string) {
 	r.Register(&WebSearchTool{})
 	r.Register(&WebFetchTool{})
 	r.Register(&WebCrawlTool{})
+	r.Register(NewCreateAgentTool())
 }

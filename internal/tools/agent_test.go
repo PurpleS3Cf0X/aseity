@@ -13,15 +13,17 @@ import (
 type MockSpawner struct {
 	CapturedTask  string
 	CapturedFiles []string
+	CapturedAgent string
 	ReturnID      int
 	ReturnErr     error
 
 	Agents map[int]types.AgentInfo
 }
 
-func (m *MockSpawner) Spawn(ctx context.Context, task string, files []string) (int, error) {
+func (m *MockSpawner) Spawn(ctx context.Context, task string, files []string, agentName string) (int, error) {
 	m.CapturedTask = task
 	m.CapturedFiles = files
+	m.CapturedAgent = agentName
 
 	// Create a mock running agent
 	if m.Agents == nil {

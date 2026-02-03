@@ -24,12 +24,13 @@ func NewSpawnAgentTool(spawner types.AgentSpawner) *SpawnAgentTool {
 type spawnAgentArgs struct {
 	Task         string   `json:"task"`
 	ContextFiles []string `json:"context_files,omitempty"`
+	AgentName    string   `json:"agent_name,omitempty"`
 }
 
 func (s *SpawnAgentTool) Name() string            { return "spawn_agent" }
 func (s *SpawnAgentTool) NeedsConfirmation() bool { return true }
 func (s *SpawnAgentTool) Description() string {
-	return "Spawn a sub-agent to handle a complex task autonomously. The sub-agent has access to all tools and will return its output when done. Use for parallel or delegated work."
+	return "Spawn a sub-agent to handle a complex task autonomously. Optionally specify 'agent_name' to use a custom persona."
 }
 
 func (s *SpawnAgentTool) Parameters() any {
@@ -44,6 +45,10 @@ func (s *SpawnAgentTool) Parameters() any {
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
 				"description": "List of absolute file paths to load into the sub-agent's context immediately.",
+			},
+			"agent_name": map[string]any{
+				"type":        "string",
+				"description": "Optional name of a custom agent persona to use (e.g. 'researcher', 'coder').",
 			},
 		},
 		"required": []string{"task"},
@@ -60,7 +65,7 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 		return Result{Error: "agent manager not initialized"}, nil
 	}
 
-	id, err := s.spawner.Spawn(ctx, args.Task, args.ContextFiles)
+	id, err := s.spawner.Spawn(ctx, args.Task, args.ContextFiles, args.AgentName)
 	if err != nil {
 		return Result{Error: err.Error()}, nil
 	}

@@ -39,7 +39,7 @@ func TestRecursiveAgent_ContextLoading(t *testing.T) {
 
 	// 4. Spawn an agent with this file in context_files
 	// This simulates the parent agent calling: spawn_agent(task="review plan", context_files=[".../secret_plan.txt"])
-	id, err := mgr.Spawn(context.Background(), "Review the plan", []string{absPath})
+	id, err := mgr.Spawn(context.Background(), "Review the plan", []string{absPath}, "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}

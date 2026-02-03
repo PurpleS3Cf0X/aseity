@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jeanpaul/aseity/internal/config"
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
 	"github.com/jeanpaul/aseity/internal/types"
@@ -65,7 +66,7 @@ func NewAgentManagerWithDepth(prov provider.Provider, toolReg *tools.Registry, m
 	return am
 }
 
-func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []string) (int, error) {
+func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []string, agentName string) (int, error) {
 	// Check nesting depth
 	if am.depth >= MaxAgentDepth {
 		return 0, fmt.Errorf("maximum agent nesting depth (%d) reached — cannot spawn sub-agent", MaxAgentDepth)
@@ -98,7 +99,24 @@ func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []s
 	am.mu.Unlock()
 
 	go func() {
-		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1)
+		// Load custom system prompt if agentName is provided
+		systemPrompt := ""
+		if agentName != "" {
+			cfg, err := config.LoadAgentConfig(agentName)
+			if err != nil {
+				// We can't return error from the goroutine easily, but we can log it
+				// or just fail the agent immediately.
+				// Better approach: Fail the agent.
+				am.mu.Lock()
+				info.status = subAgentFailed
+				info.output = fmt.Sprintf("Failed to load agent '%s': %v", agentName, err)
+				am.mu.Unlock()
+				return
+			}
+			systemPrompt = cfg.Prompt
+		}
+
+		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1, systemPrompt)
 
 		// Pre-load context files if provided
 		if len(contextFiles) > 0 {

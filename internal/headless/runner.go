@@ -14,7 +14,7 @@ import (
 // It streams answer tokens to stdout and logs/tool activity to stderr.
 func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, prompt string) error {
 	// Create the agent
-	agt := agent.New(prov, toolReg)
+	agt := agent.New(prov, toolReg, "")
 
 	// Channel for events
 	events := make(chan agent.Event)

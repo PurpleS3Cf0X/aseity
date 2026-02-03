@@ -30,7 +30,7 @@ func TestNormalChat_NoTools(t *testing.T) {
 
 	// Empty registry = no tools
 	reg := tools.NewRegistry(nil, false)
-	agent := New(prov, reg)
+	agent := New(prov, reg, "")
 
 	// Turn 1
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

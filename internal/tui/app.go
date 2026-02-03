@@ -182,7 +182,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 
 	vp := viewport.New(80, 20)
 	ctx, cancel := context.WithCancel(context.Background())
-	ag := agent.New(prov, toolReg)
+	ag := agent.New(prov, toolReg, "")
 
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -275,7 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirming = false
 				m.cancel()
 				m.ctx, m.cancel = context.WithCancel(context.Background())
-				m.agent = agent.New(m.prov, m.toolReg)
+				m.agent = agent.New(m.prov, m.toolReg, "")
 				m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
 				m.rebuildView()
 				return m, nil
