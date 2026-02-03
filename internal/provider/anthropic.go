@@ -70,7 +70,10 @@ func (a *AnthropicProvider) Chat(ctx context.Context, msgs []Message, tools []To
 	var apiMsgs []anthropicMsg
 	for _, m := range msgs {
 		if m.Role == RoleSystem {
-			systemPrompt = m.Content
+			if systemPrompt != "" {
+				systemPrompt += "\n\n"
+			}
+			systemPrompt += m.Content
 			continue
 		}
 		if m.Role == RoleTool {
