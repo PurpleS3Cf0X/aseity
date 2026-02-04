@@ -34,6 +34,7 @@ func main() {
 	flag.BoolVar(yesFlag, "y", false, "Auto-approve all tool execution")
 	headlessFlag := flag.Bool("headless", false, "Run in headless mode (no TUI)")
 	sessionFlag := flag.String("session", "", "Load a previous session (by ID or file path)")
+	qualityGateFlag := flag.Bool("quality-gate", false, "Enable automated Quality Gate (Judge/Critic loop)")
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -153,7 +154,7 @@ func main() {
 		// ... End TUI Health Checks
 		fmt.Println()
 
-		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt, *sessionFlag)
+		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt, *sessionFlag, *qualityGateFlag)
 	} else {
 		// Headless Mode
 		launchHeadless(cfg, provName, modelName, *yesFlag, initialPrompt)
@@ -433,7 +434,7 @@ func cmdSetup(docker bool) {
 	// Setup succeeded — launch the TUI directly instead of asking user to run again
 	fmt.Println()
 	fmt.Println()
-	launchTUI(cfg, cfg.DefaultProvider, modelName, false, "", "")
+	launchTUI(cfg, cfg.DefaultProvider, modelName, false, "", "", false)
 }
 
 func launchHeadless(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string) {
@@ -441,7 +442,7 @@ func launchHeadless(cfg *config.Config, provName, modelName string, allowAll boo
 		fatal("Headless mode requires an initial prompt (e.g., aseity \"do this\")")
 	}
 
-	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll)
+	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll, false)
 	if err != nil {
 		fatal("%s", err)
 	}
@@ -456,7 +457,7 @@ func launchHeadless(cfg *config.Config, provName, modelName string, allowAll boo
 	}
 }
 
-func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool) (provider.Provider, *tools.Registry, *agent.AgentManager, error) {
+func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool, qualityGate bool) (provider.Provider, *tools.Registry, *agent.AgentManager, error) {
 	prov, err := makeProvider(cfg, provName, modelName)
 	if err != nil {
 		return nil, nil, nil, err
@@ -466,7 +467,7 @@ func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool
 	toolReg := tools.NewRegistry(cfg.Tools.AutoApprove, allowAll)
 	tools.RegisterDefaults(toolReg, cfg.Tools.AllowedCommands, cfg.Tools.DisallowedCommands)
 
-	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
+	agentMgr := agent.NewAgentManager(prov, toolReg, 3, qualityGate)
 	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
 	toolReg.Register(tools.NewWaitForAgentTool(agentMgr))
 	toolReg.Register(tools.NewListAgentsTool(agentMgr))
@@ -484,8 +485,8 @@ func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool
 }
 
 // launchTUI starts the interactive chat interface
-func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string, sessionID string) {
-	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll)
+func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string, sessionID string, qualityGate bool) {
+	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll, qualityGate)
 	if err != nil {
 		fatal("%s", err)
 	}
@@ -512,7 +513,7 @@ func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, in
 		}
 	}
 
-	m := tui.NewModel(prov, toolReg, provName, modelName, conv)
+	m := tui.NewModel(prov, toolReg, provName, modelName, conv, qualityGate)
 
 	// Create program with appropriate options based on terminal capabilities
 	var opts []tea.ProgramOption

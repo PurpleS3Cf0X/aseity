@@ -38,30 +38,32 @@ type subAgentInfo struct {
 
 // AgentManager implements types.AgentSpawner.
 type AgentManager struct {
-	mu      sync.Mutex
-	agents  map[int]*subAgentInfo
-	nextID  atomic.Int32
-	maxConc int
-	prov    provider.Provider
-	toolReg *tools.Registry
-	depth   int // current nesting depth
+	mu          sync.Mutex
+	agents      map[int]*subAgentInfo
+	nextID      atomic.Int32
+	maxConc     int
+	prov        provider.Provider
+	toolReg     *tools.Registry
+	depth       int  // current nesting depth
+	qualityGate bool // propagate strict quality gate to sub-agents
 }
 
-func NewAgentManager(prov provider.Provider, toolReg *tools.Registry, maxConcurrent int) *AgentManager {
+func NewAgentManager(prov provider.Provider, toolReg *tools.Registry, maxConcurrent int, qualityGate bool) *AgentManager {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 3
 	}
 	return &AgentManager{
-		agents:  make(map[int]*subAgentInfo),
-		maxConc: maxConcurrent,
-		prov:    prov,
-		toolReg: toolReg,
+		agents:      make(map[int]*subAgentInfo),
+		maxConc:     maxConcurrent,
+		prov:        prov,
+		toolReg:     toolReg,
+		qualityGate: qualityGate,
 	}
 }
 
 // NewAgentManagerWithDepth creates a manager that tracks nesting depth.
-func NewAgentManagerWithDepth(prov provider.Provider, toolReg *tools.Registry, maxConcurrent, depth int) *AgentManager {
-	am := NewAgentManager(prov, toolReg, maxConcurrent)
+func NewAgentManagerWithDepth(prov provider.Provider, toolReg *tools.Registry, maxConcurrent, depth int, qualityGate bool) *AgentManager {
+	am := NewAgentManager(prov, toolReg, maxConcurrent, qualityGate)
 	am.depth = depth
 	return am
 }
@@ -124,6 +126,7 @@ func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []s
 		}
 
 		ag := NewWithDepth(am.prov, am.toolReg, am.depth+1, systemPrompt)
+		ag.QualityGateEnabled = am.qualityGate
 
 		// Pre-load context files if provided
 		if len(contextFiles) > 0 {

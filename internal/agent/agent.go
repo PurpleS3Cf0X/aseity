@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeanpaul/aseity/internal/provider"
@@ -37,6 +38,7 @@ const (
 	EventConfirmRequest // sent when a tool needs user approval
 	EventDone
 	EventError
+	EventJudgeCall // new event for quality gate evaluation
 )
 
 // Agent drives the think-act-observe loop.
@@ -47,6 +49,9 @@ type Agent struct {
 	ConfirmCh chan bool   // TUI sends true/false here
 	InputCh   chan string // TUI sends user input here
 	depth     int         // sub-agent nesting depth
+
+	QualityGateEnabled bool   // Enforce strict judge check before completion
+	OriginalGoal       string // Track the initial user request for judging
 }
 
 func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) *Agent {
@@ -86,6 +91,9 @@ func (a *Agent) Conversation() *Conversation { return a.conv }
 func (a *Agent) Depth() int                  { return a.depth }
 
 func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
+	if a.OriginalGoal == "" {
+		a.OriginalGoal = userMsg
+	}
 	a.conv.AddUser(userMsg)
 	a.runLoop(ctx, events)
 }
@@ -154,11 +162,133 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 		}
 
 		if len(toolCalls) == 0 {
+			// Check Quality Gate before finishing
+			if a.QualityGateEnabled && a.OriginalGoal != "" {
+				// Don't finish yet — run the judge
+				// We need the last assistant message as the "content" to judge.
+				// Since we just added it:
+				contentToJudge := assistantText
+
+				events <- Event{Type: EventJudgeCall, Text: "Evaluating response against goal..."}
+
+				// Construct Judge Arguments JSON
+				judgeArgs := map[string]string{
+					"original_goal": a.OriginalGoal,
+					"content":       contentToJudge,
+				}
+				jsonArgs, _ := json.Marshal(judgeArgs)
+
+				// Run Judge Tool manually
+				// We assume "judge_output" is registered, or we instantiate it directly if possible.
+				// But tools are in registry.
+				res, err := a.tools.Execute(ctx, "judge_output", string(jsonArgs), nil)
+
+				passed := false
+				feedback := ""
+
+				if err != nil {
+					// If judge tool missing or failed execution, warn but maybe allow finish?
+					// Or fail safe. Let's fail safe and report error.
+					feedback = fmt.Sprintf("Quality Gate execution failed: %v", err)
+				} else {
+					// Parse Judge Result
+					// Expected standard JSON from JudgeTool: { "status": "pass"|"fail", "feedback": "..." }
+					// But tools.Execute returns a Result struct where Output is the string JSON.
+					var verdict struct {
+						Status   string `json:"status"`
+						Feedback string `json:"feedback"`
+					}
+					if json.Unmarshal([]byte(res.Output), &verdict) == nil {
+						if strings.ToLower(verdict.Status) == "pass" {
+							passed = true
+						}
+						feedback = verdict.Feedback
+					} else {
+						// Malformed judge output
+						feedback = "Judge returned malformed output: " + res.Output
+					}
+				}
+
+				if !passed {
+					// REJECT - Insert system message and Continue Loop
+					rejectMsg := fmt.Sprintf("⛔ QUALITY GATE FAILED.\nYour response was rejected by the Critic.\nFeedback: %s\n\nYou MUST fix these issues and try again. Do not repeat the same mistake.", feedback)
+					a.conv.AddSystem(rejectMsg)
+					events <- Event{Type: EventError, Error: "Quality Gate Rejected: " + feedback, Done: false}
+					// Actually EventError usually signals stopping?
+					// No, we want to CONTINUE the loop.
+					// So send delta or something? Or just nothing and loop.
+					// Sending EventDelta might confuse TUI into thinking it's assistant text.
+					// Let's rely on the internal loop continuing.
+					continue
+				} else {
+					// PASS - Allow finish
+					// Maybe inform user?
+					events <- Event{Type: EventJudgeCall, Text: "Quality Gate Passed. ✅"}
+				}
+			}
+
 			events <- Event{Type: EventDone, Done: true}
 			return
 		}
 
+		// --- PARALLEL EXECUTION LOGIC ---
+		var parallelGroup []provider.ToolCall
+		var sequentialGroup []provider.ToolCall
+
 		for _, tc := range toolCalls {
+			if IsSafeToParallelize(tc.Name) {
+				parallelGroup = append(parallelGroup, tc)
+			} else {
+				sequentialGroup = append(sequentialGroup, tc)
+			}
+		}
+
+		// 1. Execute Parallel Group
+		if len(parallelGroup) > 0 {
+			var wg sync.WaitGroup
+			var mu sync.Mutex // Protect conversation writes
+			wg.Add(len(parallelGroup))
+
+			for _, tc := range parallelGroup {
+				go func(tc provider.ToolCall) {
+					defer wg.Done()
+
+					prettyArgs := formatToolArgs(tc.Name, tc.Args)
+					events <- Event{
+						Type: EventToolCall, ToolName: tc.Name,
+						ToolArgs: prettyArgs, ToolID: tc.ID,
+					}
+
+					res, err := a.tools.Execute(ctx, tc.Name, tc.Args, nil)
+
+					// Lock before writing to conversation
+					mu.Lock()
+					defer mu.Unlock()
+
+					if err != nil {
+						errMsg := fmt.Sprintf("Error executing %s: %v", tc.Name, err)
+						a.conv.AddToolResult(tc.ID, errMsg)
+						// Event channel is safe
+						events <- Event{Type: EventError, Error: errMsg, ToolID: tc.ID}
+						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: errMsg}
+						return
+					}
+
+					if res.Error != "" {
+						a.conv.AddToolResult(tc.ID, res.Error)
+						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Error}
+					} else {
+						a.conv.AddToolResult(tc.ID, res.Output)
+						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Output}
+					}
+				}(tc)
+			}
+
+			wg.Wait()
+		}
+
+		// 2. Execute Sequential Group
+		for _, tc := range sequentialGroup {
 			prettyArgs := formatToolArgs(tc.Name, tc.Args)
 
 			events <- Event{
@@ -210,6 +340,12 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 							ToolID:   tc.ID,
 						}
 					})
+				}
+				// Inject StreamCallback
+				if streamable, ok := t.(interface {
+					SetStreamCallback(func(string))
+				}); ok {
+					streamable.SetStreamCallback(streamCallback)
 				}
 			}
 

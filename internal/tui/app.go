@@ -166,7 +166,7 @@ type chatMessage struct {
 	content string
 }
 
-func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation) Model {
+func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation, qualityGate bool) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Type your message... (Enter to send, Esc to quit)"
 	ta.Focus()
@@ -206,6 +206,8 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		currentThinkingStyle:   SpinnerThinkingStyle,
 	}
 
+	sysPrompt := agent.BuildSystemPrompt()
+
 	if conversation != nil {
 		ag = agent.NewWithConversation(prov, toolReg, conversation)
 		// Rehydrate messages from conversation
@@ -223,13 +225,14 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		}
 		m.messages = append(m.messages, chatMessage{role: "system", content: "  Restored session."})
 	} else {
-		ag = agent.New(prov, toolReg, "")
+		ag = agent.New(prov, toolReg, sysPrompt)
 		// Add welcome message
 		m.messages = append(m.messages, chatMessage{
 			role:    "welcome",
 			content: fmt.Sprintf("Welcome to Aseity! You're connected to %s.\n\nI can help you with coding tasks, run commands, search the web, and manage files.\n\nTry asking me to:\n  • Explain some code\n  • Run a git command\n  • Search for documentation\n  • Create or edit a file", modelName),
 		})
 	}
+	ag.QualityGateEnabled = qualityGate
 	m.agent = ag
 
 	return m

@@ -54,7 +54,7 @@ func TestCustomAgentLifecycle(t *testing.T) {
 	toolReg := tools.NewRegistry(nil, true) // Allow all tools
 	toolReg.Register(tools.NewCreateAgentTool())
 
-	mgr := agent.NewAgentManager(mockProv, toolReg, 1)
+	mgr := agent.NewAgentManager(mockProv, toolReg, 3, false)
 	toolReg.Register(tools.NewSpawnAgentTool(mgr))
 
 	// 3. Test: Create Custom Agent via Tool

@@ -67,7 +67,7 @@ func TestKnowledgeRepoInjection(t *testing.T) {
 	toolReg := tools.NewRegistry(nil, true)
 	toolReg.Register(tools.NewCreateAgentTool())
 
-	mgr := agent.NewAgentManager(mockProv, toolReg, 1)
+	mgr := agent.NewAgentManager(mockProv, toolReg, 3, false)
 	toolReg.Register(tools.NewSpawnAgentTool(mgr))
 
 	// 3. Create Agent with Knowledge Path

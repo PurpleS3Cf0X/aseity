@@ -82,7 +82,7 @@ func TestRedTeamScenario(t *testing.T) {
 	toolReg.Register(mockBash)
 
 	// Setup Manager
-	mgr := agent.NewAgentManager(mockProv, toolReg, 1)
+	mgr := agent.NewAgentManager(mockProv, toolReg, 3, false)
 	toolReg.Register(tools.NewSpawnAgentTool(mgr))
 
 	// --- STEP 1: CREATE AGENT ---
