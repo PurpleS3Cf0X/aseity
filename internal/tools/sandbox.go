@@ -48,26 +48,26 @@ type sandboxArgs struct {
 }
 
 func (s *SandboxRunTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
+	return s.runDocker(ctx, rawArgs, nil)
+}
+
+func (s *SandboxRunTool) ExecuteStream(ctx context.Context, rawArgs string, callback func(string)) (Result, error) {
+	return s.runDocker(ctx, rawArgs, callback)
+}
+
+func (s *SandboxRunTool) runDocker(ctx context.Context, rawArgs string, callback func(string)) (Result, error) {
 	var args sandboxArgs
 	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
 		return Result{Error: "invalid arguments: " + err.Error()}, nil
 	}
 
-	// Defaults
 	if args.Image == "" {
 		args.Image = "python:3.9-slim"
 	}
-	// Default to true if omitted, but json unmarshal defaults to false.
-	// Actually, let's treat "Network" as explicit opt-out if we wanted,
-	// but standard Go bool defaults false. Let's assume false means disabled unless explicitly requested?
-	// User Requirement: "pip install" works, so we likely need network.
-	// Let's rely on the user/agent specifying "network": true.
-	// OR better, default strictly.
 
 	// Check for Docker
 	dockerCmd := "docker"
 	if _, err := exec.LookPath("docker"); err != nil {
-		// Fallback for macOS Docker Desktop
 		fallback := "/Applications/Docker.app/Contents/Resources/bin/docker"
 		if _, err := os.Stat(fallback); err == nil {
 			dockerCmd = fallback
@@ -81,43 +81,59 @@ func (s *SandboxRunTool) Execute(ctx context.Context, rawArgs string) (Result, e
 		return Result{Error: "failed to get current working directory: " + err.Error()}, nil
 	}
 
-	// Construct Docker Command
-	// docker run --rm -v $(pwd):/workspace -w /workspace [net-flag] [image] sh -c "[command]"
 	dockerArgs := []string{"run", "--rm"}
-
-	// Mount Volume
 	dockerArgs = append(dockerArgs, "-v", fmt.Sprintf("%s:/workspace", cwd))
 	dockerArgs = append(dockerArgs, "-w", "/workspace")
 
-	// Network
-	if args.Network {
-		// Default is usually bridge, which allows outbound.
-		// If we wanted to BLOCK, we'd use --network none.
-		// If args.Network is true, we leave it default.
-		// If args.Network is false, we ADD --network none.
-		// Wait, previously I said "network: true" in examples.
-		// Let's stick to that semantics: Default false (safe), explicit true needed for pip.
-	} else {
+	if !args.Network {
 		dockerArgs = append(dockerArgs, "--network", "none")
 	}
-
-	// Platform constraint (for Mac M1/M2 compatibility warnings if needed, but 'linux/amd64' vs 'arm64' is auto-handled mostly)
 
 	dockerArgs = append(dockerArgs, args.Image)
 	dockerArgs = append(dockerArgs, "sh", "-c", args.Command)
 
 	cmd := exec.CommandContext(ctx, dockerCmd, dockerArgs...)
 
-	// Capture output
-	out, err := cmd.CombinedOutput()
-	output := string(out)
+	if callback != nil {
+		// Streaming mode
+		// We'll combine stdout and stderr
+		cmd.Stderr = cmd.Stdout
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return Result{Error: fmt.Sprintf("failed to create stdout pipe: %v", err)}, nil
+		}
 
-	if err != nil {
-		return Result{
-			Output: output,
-			Error:  fmt.Sprintf("sandbox execution failed: %v", err),
-		}, nil
+		if err := cmd.Start(); err != nil {
+			return Result{Error: fmt.Sprintf("failed to start command: %v", err)}, nil
+		}
+
+		buf := make([]byte, 1024)
+		for {
+			n, err := stdout.Read(buf)
+			if n > 0 {
+				callback(string(buf[:n]))
+			}
+			if err != nil {
+				break
+			}
+		}
+
+		if err := cmd.Wait(); err != nil {
+			return Result{Error: fmt.Sprintf("command execution failed: %v", err)}, nil
+		}
+		return Result{Output: "Sandbox execution completed successfully."}, nil
+
+	} else {
+		// Non-streaming mode
+		out, err := cmd.CombinedOutput()
+		output := string(out)
+
+		if err != nil {
+			return Result{
+				Output: output,
+				Error:  fmt.Sprintf("sandbox execution failed: %v", err),
+			}, nil
+		}
+		return Result{Output: output}, nil
 	}
-
-	return Result{Output: output}, nil
 }
