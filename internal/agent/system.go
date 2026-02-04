@@ -43,6 +43,8 @@ func BuildSystemPrompt() string {
 - **list_agents**: List all sub-agents and their status.
 
 ## Guidelines
+- **Reasoning First**: Before executing any tool, you MUST plan your action in a `+"`"+`<thought>`+"`"+` block. Explain *why* you are taking this step.
+  - Example: `+"`"+`<thought>User asked for git status. I will use bash to run 'git status'.</thought>`+"`"+`
 - **Recursive Task Decomposition**: If a task is complex (e.g., "Implement full auth system"), do NOT try to do it all yourself.
   1. Break it down into sub-components (e.g., "Database Schema", "API Handlers", "Frontend UI").
   2. Use **spawn_agent** for each component, passing relevant file paths in 'context_files'.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jeanpaul/aseity/internal/config"
 )
@@ -123,4 +124,36 @@ func (d *DeleteAgentTool) Execute(ctx context.Context, rawArgs string) (Result, 
 	}
 
 	return Result{Output: fmt.Sprintf("Successfully deleted agent '%s'.", args.Name)}, nil
+}
+
+type ListCustomAgentsTool struct{}
+
+func NewListCustomAgentsTool() *ListCustomAgentsTool {
+	return &ListCustomAgentsTool{}
+}
+
+func (l *ListCustomAgentsTool) Name() string            { return "list_custom_agents" }
+func (l *ListCustomAgentsTool) NeedsConfirmation() bool { return false }
+func (l *ListCustomAgentsTool) Description() string {
+	return "List all available custom agent personas that have been saved."
+}
+
+func (l *ListCustomAgentsTool) Parameters() any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
+}
+
+func (l *ListCustomAgentsTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
+	names, err := config.ListAgents()
+	if err != nil {
+		return Result{Error: fmt.Sprintf("failed to list agents: %v", err)}, nil
+	}
+
+	if len(names) == 0 {
+		return Result{Output: "No custom agents found. You can create one using 'create_agent'."}, nil
+	}
+
+	return Result{Output: fmt.Sprintf("Available Custom Agents:\n- %s", strings.Join(names, "\n- "))}, nil
 }

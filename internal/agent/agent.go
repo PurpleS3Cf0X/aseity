@@ -98,6 +98,7 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 		var toolCalls []provider.ToolCall
 
 		for chunk := range stream {
+
 			if chunk.Error != nil {
 				events <- Event{Type: EventError, Error: chunk.Error.Error(), Done: true}
 				return
@@ -203,15 +204,64 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 
 			res, err := a.tools.Execute(ctx, tc.Name, tc.Args, streamCallback)
 			if err != nil {
-				errMsg := fmt.Sprintf("tool execution error: %s", err.Error())
-				a.conv.AddToolResult(tc.ID, errMsg)
-				events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Error: errMsg}
+				errMsg := err.Error()
+				fmt.Printf("DEBUG: System error: '%s'\n", errMsg) // DEBUG
+				// Nudge: Check for common model mistakes
+				if strings.Contains(errMsg, "unknown tool") {
+					suggestions := make([]string, 0)
+					// Simple heuristic for common hallucinations
+					lowerName := strings.ToLower(tc.Name)
+					if strings.Contains(lowerName, "fetch") {
+						suggestions = append(suggestions, "web_fetch")
+					} else if strings.Contains(lowerName, "crawl") {
+						suggestions = append(suggestions, "web_crawl")
+					} else if strings.Contains(lowerName, "write") {
+						suggestions = append(suggestions, "file_write")
+					} else if strings.Contains(lowerName, "read") {
+						suggestions = append(suggestions, "file_read")
+					}
+
+					if len(suggestions) > 0 {
+						errMsg += fmt.Sprintf(". Did you mean '%s'? Please retry with the correct name.", suggestions[0])
+					} else {
+						errMsg += ". Please check the 'Available Tools' list and retry with a valid tool name."
+					}
+				} else if strings.Contains(errMsg, "invalid json") {
+					errMsg += ". Your JSON structure was malformed. Please ensure all quotes are escaped properly and retry."
+				}
+
+				formattedErr := fmt.Sprintf("tool execution error: %s", errMsg)
+				a.conv.AddToolResult(tc.ID, formattedErr)
+				events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Error: formattedErr}
 				continue
 			}
 
 			output := res.Output
+			// Nudge logic for Result errors (like unknown tool returned by Registry)
 			if res.Error != "" {
-				output += "\nError: " + res.Error
+				errMsg := res.Error
+				fmt.Printf("DEBUG: Nudging result error: '%s'\n", errMsg) // DEBUG
+				if strings.Contains(errMsg, "unknown tool") {
+					suggestions := make([]string, 0)
+					// Simple heuristic for common hallucinations
+					lowerName := strings.ToLower(tc.Name)
+					if strings.Contains(lowerName, "fetch") {
+						suggestions = append(suggestions, "web_fetch")
+					} else if strings.Contains(lowerName, "crawl") {
+						suggestions = append(suggestions, "web_crawl")
+					} else if strings.Contains(lowerName, "write") {
+						suggestions = append(suggestions, "file_write")
+					} else if strings.Contains(lowerName, "read") {
+						suggestions = append(suggestions, "file_read")
+					}
+
+					if len(suggestions) > 0 {
+						errMsg += fmt.Sprintf(". Did you mean '%s'? Please retry with the correct name.", suggestions[0])
+					} else {
+						errMsg += ". Please check the 'Available Tools' list and retry with a valid tool name."
+					}
+				}
+				output += "\nError: " + errMsg
 			}
 			a.conv.AddToolResult(tc.ID, output)
 			events <- Event{

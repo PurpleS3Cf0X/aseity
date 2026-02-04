@@ -727,8 +727,8 @@ func (m *Model) rebuildView() {
 				}
 			}
 			sb.WriteString("\n")
-		case "tool":
-			sb.WriteString(msg.content + "\n")
+			// Enhanced Tool Execution Display
+			sb.WriteString(ToolExecStyle.Render("  ⚡ "+msg.content) + "\n")
 		case "tool_result":
 			for _, line := range strings.Split(msg.content, "\n") {
 				sb.WriteString(ToolResultStyle.Render("    "+line) + "\n")
@@ -745,7 +745,8 @@ func (m *Model) rebuildView() {
 		case "system":
 			sb.WriteString(SystemMsgStyle.Render("  ℹ"+msg.content) + "\n\n")
 		case "subagent":
-			sb.WriteString(SubAgentStyle.Render("  "+msg.content) + "\n")
+			// Specialized Sub-Agent Box
+			sb.WriteString(AgentActivityStyle.Render("🤖 Agent Activity:\n"+msg.content) + "\n")
 		case "welcome":
 			// Animated Banner
 			banner := AnimatedBanner(m.frame)
@@ -786,7 +787,7 @@ func (m *Model) rebuildView() {
 		case SpinnerThinking:
 			sb.WriteString(SpinnerThinkingStyle.Render("  "+spinnerView+" ") + ThinkingLabelStyle.Render(statusText) + "\n")
 		case SpinnerTool:
-			sb.WriteString(SpinnerToolStyle.Render("  "+spinnerView+" ") + ToolLabelStyle.Render(statusText) + "\n")
+			sb.WriteString(SpinnerToolStyle.Render("  "+spinnerView+" ") + ToolExecStyle.Render(statusText) + "\n")
 		case SpinnerNetwork:
 			sb.WriteString(WebIconStyle.Render("  "+spinnerView+" ") + InfoStyle.Render(statusText) + "\n")
 		default:

@@ -65,7 +65,13 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 		return Result{Error: "agent manager not initialized"}, nil
 	}
 
-	id, err := s.spawner.Spawn(ctx, args.Task, args.ContextFiles, args.AgentName)
+	// Structured Prompting: Enforce Persona and Planning
+	finalTask := args.Task
+	if args.AgentName != "" {
+		finalTask = fmt.Sprintf("You are acting as the '%s' agent. Your specific objective is:\n%s\n\nINSTRUCTIONS:\n1. Analyze the request.\n2. Create a plan in a <thought> block.\n3. Execute the plan effectively.", args.AgentName, args.Task)
+	}
+
+	id, err := s.spawner.Spawn(ctx, finalTask, args.ContextFiles, args.AgentName)
 	if err != nil {
 		return Result{Error: err.Error()}, nil
 	}

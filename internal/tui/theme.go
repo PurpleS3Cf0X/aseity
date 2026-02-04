@@ -30,6 +30,11 @@ var (
 	SoftYellow = lipgloss.Color("#FBBF24") // Soft highlights
 	MintGreen  = lipgloss.Color("#34D399") // Success indicators
 
+	// New Styles for TUI Improvements
+	ThinkingColor      = lipgloss.Color("#6B7280") // Gray/Dim
+	ToolExecColor      = lipgloss.Color("#3B82F6") // Blue
+	AgentActivityColor = lipgloss.Color("#10B981") // Emerald
+
 	// Status bar — Gradient effect
 	StatusBarStyle = lipgloss.NewStyle().
 			Background(DarkGreen).
@@ -151,8 +156,18 @@ var (
 				Bold(true)
 
 	ThinkingStyle = lipgloss.NewStyle().
-			Foreground(DimPurple).
+			Foreground(ThinkingColor).
 			Italic(true)
+
+	ToolExecStyle = lipgloss.NewStyle().
+			Foreground(ToolExecColor).
+			Bold(true)
+
+	AgentActivityStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(AgentActivityColor).
+				Padding(0, 1).
+				Margin(0, 2)
 
 	// Sub-agent activity — Distinct purple/teal
 	SubAgentStyle = lipgloss.NewStyle().
