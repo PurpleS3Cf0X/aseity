@@ -151,6 +151,20 @@ func main() {
 		if status.Reachable {
 			fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
 		}
+
+		// Check if model is available (for ollama provider)
+		if provName == "ollama" || (pcfg.Type == "openai" && strings.Contains(pcfg.BaseURL, "11434")) {
+			if !setup.IsModelAvailable(modelName) {
+				fmt.Printf("  %s\n", tui.SpinnerStyle.Render("● Model "+modelName+" not found, pulling..."))
+				if err := setup.PullModel(modelName); err != nil {
+					fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ Failed to pull model: "+err.Error()))
+					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Try: ollama pull "+modelName))
+					os.Exit(1)
+				}
+				fmt.Printf("\r  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" ready"))
+			}
+		}
+
 		// ... End TUI Health Checks
 		fmt.Println()
 
