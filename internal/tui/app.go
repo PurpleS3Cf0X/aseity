@@ -257,8 +257,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		headerH := 8 // Estimated new header height
 		inputH := 3  // Minimal input
+		menuH := 0
+		if m.menu.active {
+			menuH = 16 // 14 for list + 2 for borders/padding
+		}
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - headerH - inputH
+		m.viewport.Height = msg.Height - headerH - inputH - menuH
 		m.textarea.SetWidth(msg.Width - 4)
 		m.rebuildView()
 
@@ -293,6 +297,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.menu.active = false
 				m.textarea.SetValue("/" + typed)
 				m.textarea.Focus()
+
+				// Restore viewport height on Escape
+				headerH := 8
+				inputH := 3
+				// menuH is 0
+				m.viewport.Height = m.height - headerH - inputH
+				m.rebuildView()
+
 				return m, nil
 			}
 			return m, cmd
@@ -323,6 +335,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reset state to ensure selection is at top and filter is clear
 			m.menu.list.ResetSelected()
 			m.menu.list.ResetFilter()
+
+			// Adjust viewport height for menu
+			headerH := 8
+			inputH := 3
+			menuH := 16
+			m.viewport.Height = m.height - headerH - inputH - menuH
+			m.rebuildView()
+
 			// Forward the '/' to the menu list to activate filtering mode immediately
 			var cmd tea.Cmd
 			m.menu, cmd = m.menu.Update(msg)
@@ -1041,37 +1061,27 @@ func (m Model) View() string {
 	help := keyStyle.Render("Enter: send  •  Alt+Enter: newline  •  /help  •  Esc: quit")
 
 	// Render content
-	view := lipgloss.JoinVertical(lipgloss.Left,
+	// Overlay Menu if active
+	// Overlay Menu if active
+	if m.menu.active {
+		menuView := m.menu.View()
+
+		// Join vertical placing menu BELOW input
+		return lipgloss.JoinVertical(lipgloss.Left,
+			header,
+			m.viewport.View(),
+			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
+			menuView,
+			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
+		)
+	}
+	// Menu inactive
+	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		m.viewport.View(),
 		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
 		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
 	)
-
-	// Overlay Menu if active
-	if m.menu.active {
-		// Place menu above the input area
-		// Since absolute positioning is hard without specific lipgloss.Place logic relative to window height,
-		// we can try to join it vertically above the input?
-		// But Viewport uses flex height.
-		// Better: Use Place() relative to bottom-left?
-
-		// Simpler approach: Just render it AT THE BOTTOM, shifting help down?
-		// Or actually, popups are hard.
-		// Let's render it ABOVE the input.
-
-		// Refactor view structure to include menu
-		menuView := m.menu.View()
-
-		return lipgloss.JoinVertical(lipgloss.Left,
-			header,
-			m.viewport.View(),
-			menuView, // Menu sits here
-			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
-			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
-		)
-	}
-	return view
 }
 
 func truncate(s string, n int) string {
