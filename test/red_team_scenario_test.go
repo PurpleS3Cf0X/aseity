@@ -24,7 +24,7 @@ func (m *MockProviderRedTeam) Chat(ctx context.Context, msgs []provider.Message,
 	}
 
 	// Determine response based on the task
-	lastMsg := msgs[len(msgs)-1].Content
+	// lastMsg := msgs[len(msgs)-1].Content
 
 	ch := make(chan provider.StreamChunk)
 	go func() {

@@ -41,7 +41,7 @@ func (m *MockProviderBehavior) Chat(ctx context.Context, msgs []provider.Message
 
 		// Stream it back
 		ch <- provider.StreamChunk{
-			Content: response,
+			Delta: response,
 		}
 	}()
 
