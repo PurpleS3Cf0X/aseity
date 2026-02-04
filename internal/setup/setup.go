@@ -261,8 +261,17 @@ func PullModel(model string) error {
 		return fmt.Errorf("stream error: %v", err)
 	}
 
-	success(fmt.Sprintf("Model %s ready", model))
-	return nil
+	// Verify model is actually available after pull
+	info("Verifying model is ready...")
+	for i := 0; i < 30; i++ {
+		time.Sleep(500 * time.Millisecond)
+		if IsModelAvailable(model) {
+			success(fmt.Sprintf("Model %s ready", model))
+			return nil
+		}
+	}
+
+	return fmt.Errorf("model pull completed but model not available after 15 seconds")
 }
 
 func StartDockerOllama() error {
