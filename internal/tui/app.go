@@ -202,9 +202,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		prov:                   prov,
 		toolReg:                toolReg,
 		ctx:                    ctx,
-		cancel:                 cancel,
 		renderer:               r,
-		currentThinkingSpinner: ThinkingSpinner,
 		currentThinkingSpinner: ThinkingSpinner,
 		currentThinkingStyle:   SpinnerThinkingStyle,
 		menu:                   NewMenuModel(), // Init menu directly
