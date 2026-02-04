@@ -180,10 +180,6 @@ var (
 			Italic(true)
 
 	// Code blocks and syntax highlighting accents
-	CodeBlockStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1a1a2e")).
-			Foreground(White).
-			Padding(0, 1)
 
 	// Success style
 	SuccessStyle = lipgloss.NewStyle().
@@ -210,6 +206,49 @@ var (
 				Foreground(Cyan).
 				Bold(true).
 				Align(lipgloss.Center)
+
+	// --- Block UI Styles (V2) ---
+
+	// UserBlockStyle — Green/Bright rounded box
+	UserBlockStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(BrightGreen).
+			Padding(1, 2).
+			Margin(1, 0).
+			Width(76) // Fixed width for consistent look, or dynamic in app
+
+	// AssistantBlockStyle — Cyan rounded box
+	AssistantBlockStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(Cyan).
+				Padding(1, 2).
+				Margin(0, 0, 1, 0)
+
+	// ToolBlockStyle — Subtle, distinct from chat
+	ToolBlockStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(MidGray).
+			Padding(0, 1).
+			Margin(0, 0, 1, 2) // Indented slightly
+
+	// ThinkingBlockStyle — Minimalist, dim
+	ThinkingBlockStyle = lipgloss.NewStyle().
+				Border(lipgloss.HiddenBorder()). // Or distinct if preferred
+				Padding(0, 2).
+				Margin(0, 0, 1, 0).
+				Foreground(DimPurple)
+
+	// CodeBlockStyle — Rich background
+	CodeBlockStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#1a1a2e")). // Deep blue/black
+			Foreground(lipgloss.Color("#e0e0e0")).
+			Padding(1, 2).
+			Margin(1, 0)
+
+	// Headers for blocks
+	RoleHeaderStyle = lipgloss.NewStyle().
+			Bold(true).
+			MarginBottom(1)
 )
 
 const Banner = `

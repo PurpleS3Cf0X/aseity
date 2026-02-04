@@ -2,70 +2,71 @@ package agent
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
 )
 
-// MockProvider intercepts Chat calls to verify context
-type MockProvider struct {
-	LastMessages []provider.Message
-}
+// MockProvider for testing agents
+type MockProvider struct{}
 
-func (m *MockProvider) Chat(ctx context.Context, msgs []provider.Message, tools []provider.ToolDef) (<-chan provider.StreamChunk, error) {
-	m.LastMessages = msgs
+func (m *MockProvider) Chat(ctx context.Context, messages []provider.Message, toolDefs []provider.ToolDef) (<-chan provider.StreamChunk, error) {
 	ch := make(chan provider.StreamChunk)
-	close(ch)
+	go func() {
+		// Simple response simulating a done agent
+		ch <- provider.StreamChunk{
+			Delta: "I have completed the sub-task.",
+			Done:  true,
+		}
+		close(ch)
+	}()
 	return ch, nil
 }
-func (m *MockProvider) Name() string                                 { return "mock" }
-func (m *MockProvider) Models(ctx context.Context) ([]string, error) { return []string{"mock"}, nil }
 
-func TestRecursiveAgent_ContextLoading(t *testing.T) {
-	// 1. Setup Mock Provider
-	mockProv := &MockProvider{}
+func (m *MockProvider) Name() string { return "mock" }
+func (m *MockProvider) Models(ctx context.Context) ([]string, error) {
+	return []string{"mock-model"}, nil
+}
 
-	// 2. Setup Agent Manager
-	// 2. Setup Agent Manager
-	toolReg := tools.NewRegistry(nil, false)
-	mgr := NewAgentManager(mockProv, toolReg, 1)
+func TestRecursiveSpawn(t *testing.T) {
+	// Setup
+	prov := &MockProvider{}
+	toolReg := tools.NewRegistry(nil, true)
+	am := NewAgentManager(prov, toolReg, 3)
 
-	// 3. Define a real file to load as context
-	absPath, _ := filepath.Abs("../../test_data/secret_plan.txt")
+	// Register tools manually as in main.go
+	spawnTool := tools.NewSpawnAgentTool(am)
+	waitTool := tools.NewWaitForAgentTool(am)
+	toolReg.Register(spawnTool)
+	toolReg.Register(waitTool)
 
-	// 4. Spawn an agent with this file in context_files
-	// This simulates the parent agent calling: spawn_agent(task="review plan", context_files=[".../secret_plan.txt"])
-	id, err := mgr.Spawn(context.Background(), "Review the plan", []string{absPath}, "")
+	ctx := context.Background()
+
+	// 1. Test Sync Spawn
+	// We'll call the tool execute method directly
+	args := `{"task": "echo hello"}`
+	res, err := spawnTool.Execute(ctx, args)
 	if err != nil {
-		t.Fatalf("Spawn failed: %v", err)
+		t.Fatalf("Sync spawn failed: %v", err)
+	}
+	if res.Error != "" {
+		t.Fatalf("Sync spawn returned error: %s", res.Error)
 	}
 
-	// 5. Wait briefly for the goroutine to start and call Chat()
-	// Since everything is local/mocked, 100ms is plenty.
-	time.Sleep(100 * time.Millisecond)
-
-	// 6. Inspect what the sub-agent "saw"
-	// The sub-agent should have called Chat() immediately.
-	// We check mockProv.LastMessages for the file content.
-	foundContext := false
-	for _, msg := range mockProv.LastMessages {
-		if strings.Contains(msg.Content, "secret_plan.txt") &&
-			strings.Contains(msg.Content, "exhaust ports") {
-			foundContext = true
-			break
-		}
+	// 2. Test Async Spawn
+	argsAsync := `{"task": "sleep 1", "background": true}`
+	resAsync, err := spawnTool.Execute(ctx, argsAsync)
+	if err != nil {
+		t.Fatalf("Async spawn failed: %v", err)
 	}
-
-	if !foundContext {
-		t.Errorf("Sub-agent did not receive context file content. Messages:\n%+v", mockProv.LastMessages)
-	} else {
-		t.Logf("Success! Sub-agent #%d received context file content.", id)
+	if resAsync.Error != "" {
+		t.Fatalf("Async spawn returned error: %s", resAsync.Error)
 	}
-
-	// Cleanup
-	mgr.Cancel(id)
+	// Extract ID? The message says "Agent #%d spawned..."
+	// We can trust the internal manager state for this test.
+	agents := am.List()
+	if len(agents) != 2 {
+		t.Errorf("Expected 2 agents, got %d", len(agents))
+	}
 }

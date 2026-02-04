@@ -64,6 +64,17 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 	}
 }
 
+// NewWithConversation creates an agent using an existing conversation history.
+func NewWithConversation(prov provider.Provider, registry *tools.Registry, conv *Conversation) *Agent {
+	return &Agent{
+		prov:      prov,
+		tools:     registry,
+		conv:      conv,
+		ConfirmCh: make(chan bool, 1),
+		InputCh:   make(chan string, 1),
+	}
+}
+
 // NewWithDepth creates a sub-agent with nesting depth tracking.
 func NewWithDepth(prov provider.Provider, registry *tools.Registry, depth int, systemPrompt string) *Agent {
 	a := New(prov, registry, systemPrompt)

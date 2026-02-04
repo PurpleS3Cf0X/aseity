@@ -33,6 +33,7 @@ func main() {
 	yesFlag := flag.Bool("yes", false, "Auto-approve all tool execution")
 	flag.BoolVar(yesFlag, "y", false, "Auto-approve all tool execution")
 	headlessFlag := flag.Bool("headless", false, "Run in headless mode (no TUI)")
+	sessionFlag := flag.String("session", "", "Load a previous session (by ID or file path)")
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -152,7 +153,7 @@ func main() {
 		// ... End TUI Health Checks
 		fmt.Println()
 
-		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt)
+		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt, *sessionFlag)
 	} else {
 		// Headless Mode
 		launchHeadless(cfg, provName, modelName, *yesFlag, initialPrompt)
@@ -431,7 +432,8 @@ func cmdSetup(docker bool) {
 
 	// Setup succeeded — launch the TUI directly instead of asking user to run again
 	fmt.Println()
-	launchTUI(cfg, cfg.DefaultProvider, modelName, false, "")
+	fmt.Println()
+	launchTUI(cfg, cfg.DefaultProvider, modelName, false, "", "")
 }
 
 func launchHeadless(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string) {
@@ -466,6 +468,7 @@ func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool
 
 	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
 	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
+	toolReg.Register(tools.NewWaitForAgentTool(agentMgr))
 	toolReg.Register(tools.NewListAgentsTool(agentMgr))
 	toolReg.Register(tools.NewJudgeTool(agentMgr))
 
@@ -481,13 +484,35 @@ func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool
 }
 
 // launchTUI starts the interactive chat interface
-func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string) {
+func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, initialPrompt string, sessionID string) {
 	prov, toolReg, _, err := setupAgentEnv(cfg, provName, modelName, allowAll)
 	if err != nil {
 		fatal("%s", err)
 	}
 
-	m := tui.NewModel(prov, toolReg, provName, modelName)
+	var conv *agent.Conversation
+	if sessionID != "" {
+		// heuristic: if it contains just alphanumeric, treat as ID in ~/.config/aseity/sessions/ID.json
+		// if contains / or .json, treat as path
+		path := sessionID
+		if !strings.Contains(sessionID, "/") && !strings.Contains(sessionID, ".") {
+			home, _ := os.UserHomeDir()
+			path = fmt.Sprintf("%s/.config/aseity/sessions/%s.json", home, sessionID)
+		}
+
+		fmt.Printf("  Loading session from %s...\n", path)
+		c, err := agent.LoadConversation(path)
+		if err != nil {
+			fmt.Printf("  %s\n\n", tui.ErrorStyle.Render("✗ Failed to load session: "+err.Error()))
+			// Fallback to new session? Or exit?
+			// Let's fallback but warn
+			time.Sleep(2 * time.Second)
+		} else {
+			conv = c
+		}
+	}
+
+	m := tui.NewModel(prov, toolReg, provName, modelName, conv)
 
 	// Create program with appropriate options based on terminal capabilities
 	var opts []tea.ProgramOption
@@ -544,6 +569,7 @@ func showHelp() {
 ` + tui.UserLabelStyle.Render("FLAGS:") + `
   --provider <name>           Use specific provider (ollama, openai, anthropic, google)
   --model <name>              Use specific model
+  --session <id|path>         Resume a previous session
   --version                   Show version
   --yes, -y                   Auto-approve all tool execution (dangerous)
   --help, -h                  Show this help

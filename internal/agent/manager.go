@@ -176,6 +176,9 @@ func (am *AgentManager) Spawn(ctx context.Context, task string, contextFiles []s
 				am.mu.Unlock()
 				return
 			}
+			if evt.Type == EventDone {
+				break
+			}
 		}
 
 		am.mu.Lock()

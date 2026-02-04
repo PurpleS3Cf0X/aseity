@@ -26,6 +26,7 @@ type spawnAgentArgs struct {
 	ContextFiles  []string `json:"context_files,omitempty"`
 	AgentName     string   `json:"agent_name,omitempty"`
 	RequireReview bool     `json:"require_review,omitempty"`
+	Background    bool     `json:"background,omitempty"`
 }
 
 func (s *SpawnAgentTool) Name() string            { return "spawn_agent" }
@@ -54,6 +55,10 @@ func (s *SpawnAgentTool) Parameters() any {
 			"require_review": map[string]any{
 				"type":        "boolean",
 				"description": "If true, a 'Critic' agent will verify the output and request corrections if needed (auto-loop).",
+			},
+			"background": map[string]any{
+				"type":        "boolean",
+				"description": "If true, returns the Agent ID immediately without waiting for completion (default: false). Use 'wait_for_agent' to get results later.",
 			},
 		},
 		"required": []string{"task"},
@@ -98,7 +103,11 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 			return Result{Error: err.Error()}, nil
 		}
 
-		// 3. Wait for Worker
+		// 3. Wait or Return
+		if args.Background {
+			return Result{Output: fmt.Sprintf("Agent #%d spawned in background. Use 'wait_for_agent' to check status.", id)}, nil
+		}
+
 		workerRes := s.waitForAgent(ctx, id)
 		if workerRes.Error != "" {
 			return workerRes, nil // Runtime error in agent
@@ -145,6 +154,47 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 	}
 
 	return Result{Error: fmt.Sprintf("Auto-Verification failed after %d attempts. Last feedback: %s", maxAttempts, lastOutput)}, nil
+}
+
+// WaitForAgentTool waits for a specific background agent to complete
+type WaitForAgentTool struct {
+	spawner types.AgentSpawner
+}
+
+func NewWaitForAgentTool(spawner types.AgentSpawner) *WaitForAgentTool {
+	return &WaitForAgentTool{spawner: spawner}
+}
+
+func (w *WaitForAgentTool) Name() string            { return "wait_for_agent" }
+func (w *WaitForAgentTool) NeedsConfirmation() bool { return false }
+func (w *WaitForAgentTool) Description() string {
+	return "Wait for a background sub-agent to complete and get its output."
+}
+
+func (w *WaitForAgentTool) Parameters() any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"agent_id": map[string]any{
+				"type":        "integer",
+				"description": "The ID of the agent to wait for.",
+			},
+		},
+		"required": []string{"agent_id"},
+	}
+}
+
+func (w *WaitForAgentTool) Execute(ctx context.Context, rawArgs string) (Result, error) {
+	var args struct {
+		AgentID int `json:"agent_id"`
+	}
+	if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
+		return Result{Error: "invalid arguments: " + err.Error()}, nil
+	}
+
+	// Re-use logic from SpawnAgentTool
+	helper := &SpawnAgentTool{spawner: w.spawner}
+	return helper.waitForAgent(ctx, args.AgentID), nil
 }
 
 func (s *SpawnAgentTool) waitForAgent(ctx context.Context, id int) Result {

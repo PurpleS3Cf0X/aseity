@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -165,7 +166,7 @@ type chatMessage struct {
 	content string
 }
 
-func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string) Model {
+func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Type your message... (Enter to send, Esc to quit)"
 	ta.Focus()
@@ -182,7 +183,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 
 	vp := viewport.New(80, 20)
 	ctx, cancel := context.WithCancel(context.Background())
-	ag := agent.New(prov, toolReg, "")
+	var ag *agent.Agent
 
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -198,7 +199,6 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		modelName:              modelName,
 		prov:                   prov,
 		toolReg:                toolReg,
-		agent:                  ag,
 		ctx:                    ctx,
 		cancel:                 cancel,
 		renderer:               r,
@@ -206,11 +206,31 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		currentThinkingStyle:   SpinnerThinkingStyle,
 	}
 
-	// Add welcome message
-	m.messages = append(m.messages, chatMessage{
-		role:    "welcome",
-		content: fmt.Sprintf("Welcome to Aseity! You're connected to %s.\n\nI can help you with coding tasks, run commands, search the web, and manage files.\n\nTry asking me to:\n  • Explain some code\n  • Run a git command\n  • Search for documentation\n  • Create or edit a file", modelName),
-	})
+	if conversation != nil {
+		ag = agent.NewWithConversation(prov, toolReg, conversation)
+		// Rehydrate messages from conversation
+		for _, msg := range conversation.Messages() {
+			switch msg.Role {
+			case provider.RoleUser:
+				m.messages = append(m.messages, chatMessage{role: "user", content: msg.Content})
+			case provider.RoleAssistant:
+				m.messages = append(m.messages, chatMessage{role: "assistant", content: msg.Content})
+				// TODO: Handle tool calls display if needed from history, strictly strictly rehydrating display is hard if we don't store ToolUse details in chatMessage properly.
+				// For now, simpler rehydration is acceptable.
+			case provider.RoleTool:
+				m.messages = append(m.messages, chatMessage{role: "tool_result", content: msg.Content})
+			}
+		}
+		m.messages = append(m.messages, chatMessage{role: "system", content: "  Restored session."})
+	} else {
+		ag = agent.New(prov, toolReg, "")
+		// Add welcome message
+		m.messages = append(m.messages, chatMessage{
+			role:    "welcome",
+			content: fmt.Sprintf("Welcome to Aseity! You're connected to %s.\n\nI can help you with coding tasks, run commands, search the web, and manage files.\n\nTry asking me to:\n  • Explain some code\n  • Run a git command\n  • Search for documentation\n  • Create or edit a file", modelName),
+		})
+	}
+	m.agent = ag
 
 	return m
 }
@@ -275,7 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirming = false
 				m.cancel()
 				m.ctx, m.cancel = context.WithCancel(context.Background())
-				m.agent = agent.New(m.prov, m.toolReg, "")
+				m.agent = agent.New(m.prov, m.toolReg, "") // Reset agent state on hard cancel? Or should we preserve? Current behavior is reset.
 				m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
 				m.rebuildView()
 				return m, nil
@@ -465,6 +485,9 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
     /save [path] — export conversation to markdown file
     /tokens      — show estimated token usage
     /model       — show current model
+    /status      — run git status
+    /diff [full] — run git diff --stat (or full)
+    /commit <m>  — run git commit -m <m>
     /quit        — exit aseity
 
   Keyboard shortcuts:
@@ -519,6 +542,54 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 		m.agent.Conversation().Save()
 		m.cancel()
 		return *m, tea.Quit
+
+	case "/status":
+		out, err := exec.Command("git", "status").CombinedOutput()
+		if err != nil {
+			m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("git status failed: %v", err)})
+		} else {
+			m.messages = append(m.messages, chatMessage{role: "system", content: "  Git Status:\n" + string(out)})
+		}
+
+	case "/diff":
+		args := []string{"diff", "--stat"}
+		if len(parts) > 1 && parts[1] == "full" {
+			args = []string{"diff"}
+		}
+		out, err := exec.Command("git", args...).CombinedOutput()
+		if err != nil {
+			m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("git diff failed: %v", err)})
+		} else {
+			if len(out) == 0 {
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  No changes."})
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  Git Diff:\n" + string(out)})
+			}
+		}
+
+	case "/commit":
+		if len(parts) < 2 {
+			m.messages = append(m.messages, chatMessage{role: "error", content: "Usage: /commit \"message\""})
+		} else {
+			// Primitive argument parsing to handle quotes
+			// strings.Fields splits by space, so "p 1" becomes ["p", "1"]
+			// We need to rejoin everything after /commit
+			msg := strings.Join(parts[1:], " ")
+			msg = strings.Trim(msg, "\"")
+
+			// We should probably run 'git add .' first?
+			// The user expectation of "commit" might imply "add and commit" or just commit.
+			// Let's assume standard behavior: commit what is staged, unless user asks otherwise.
+			// OR, for convenience, "commit -am" if prompt implies.
+			// Let's stick to simple "commit -m".
+
+			out, err := exec.Command("git", "commit", "-m", msg).CombinedOutput()
+			if err != nil {
+				m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("git commit failed: %v\n%s", err, out)})
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  Git Commit:\n" + string(out)})
+			}
+		}
 
 	default:
 		m.messages = append(m.messages, chatMessage{
@@ -679,123 +750,185 @@ func formatToolCallDisplay(name, args string) string {
 
 func (m *Model) rebuildView() {
 	var sb strings.Builder
-	for _, msg := range m.messages {
+
+	// Iterate with index to allow lookahead/grouping
+	for i := 0; i < len(m.messages); i++ {
+		msg := m.messages[i]
+
 		switch msg.role {
+		case "welcome":
+			// Welcome message
+			sb.WriteString(m.renderAssistantBlock("Aseity", msg.content, true))
+
 		case "user":
-			sb.WriteString(UserLabelStyle.Render("  You") + "\n")
-			sb.WriteString(UserMsgStyle.Render("  "+msg.content) + "\n\n")
+			sb.WriteString(m.renderUserBlock(msg.content))
+
 		case "thinking":
-			if m.showThinking && msg.content != "" {
-				sb.WriteString(ThinkingLabelStyle.Render("  💭 Reasoning") + "\n")
-				lines := strings.Split(msg.content, "\n")
-				maxLines := 20
-				if len(lines) > maxLines {
-					for _, line := range lines[:maxLines] {
-						sb.WriteString(ThinkingStyle.Render("    │ "+line) + "\n")
-					}
-					sb.WriteString(ThinkingStyle.Render(fmt.Sprintf("    └─ ... (%d more lines)", len(lines)-maxLines)) + "\n")
-				} else {
-					for i, line := range lines {
-						prefix := "    │ "
-						if i == len(lines)-1 {
-							prefix = "    └─"
-						}
-						sb.WriteString(ThinkingStyle.Render(prefix+line) + "\n")
-					}
-				}
-				sb.WriteString("\n")
-			} else if !m.showThinking && msg.content != "" {
-				lines := strings.Count(msg.content, "\n") + 1
-				sb.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("  💭 Reasoning (%d lines) ", lines)) + HelpStyle.Render("[Ctrl+T to expand]") + "\n\n")
-			}
+			sb.WriteString(m.renderThinkingBlock(msg.content))
+
 		case "assistant":
-			sb.WriteString(AssistantLabelStyle.Render("  Aseity") + "\n")
-			// Render markdown with glamour
-			rendered, err := m.renderer.Render(msg.content)
-			if err != nil {
-				// Fallback to plain text
-				for _, line := range strings.Split(msg.content, "\n") {
-					sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
-				}
-			} else {
-				// Indent the rendered markdown slightly
-				lines := strings.Split(rendered, "\n")
-				for _, line := range lines {
-					if line != "" {
-						sb.WriteString("  " + line + "\n")
-					}
-				}
+			sb.WriteString(m.renderAssistantBlock("Aseity", msg.content, false))
+
+		case "tool":
+			// Group tool call with its result if the next message is a result
+			var result string
+			if i+1 < len(m.messages) && m.messages[i+1].role == "tool_result" {
+				result = m.messages[i+1].content
+				i++ // Skip next message
 			}
-			sb.WriteString("\n")
-			// Enhanced Tool Execution Display
-			sb.WriteString(ToolExecStyle.Render("  ⚡ "+msg.content) + "\n")
+			// If result is empty, it might be running or just no output?
+			// msg.content contains the formatted header from formatToolCallDisplay
+			sb.WriteString(m.renderToolBlock(msg.content, result))
+
 		case "tool_result":
-			for _, line := range strings.Split(msg.content, "\n") {
-				sb.WriteString(ToolResultStyle.Render("    "+line) + "\n")
-			}
-			sb.WriteString("\n")
+			// Orphaned result (shouldn't happen often if grouped above)
+			sb.WriteString(m.renderToolBlock("Previous Tool", msg.content))
+
 		case "confirm_prompt":
-			sb.WriteString(WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n")
+			sb.WriteString(WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n\n")
+
 		case "confirm":
-			sb.WriteString(SuccessStyle.Render("  ✓"+msg.content) + "\n\n")
+			sb.WriteString(SuccessStyle.Render("  ✓ "+msg.content) + "\n\n")
+
 		case "confirm_deny":
-			sb.WriteString(ErrorStyle.Render("  ✗"+msg.content) + "\n\n")
+			sb.WriteString(ErrorStyle.Render("  ✗ "+msg.content) + "\n\n")
+
+		case "system":
+			sb.WriteString(SystemMsgStyle.Render("  ℹ "+msg.content) + "\n\n")
+
 		case "error":
 			sb.WriteString(ErrorStyle.Render("  ✗ Error: "+msg.content) + "\n\n")
-		case "system":
-			sb.WriteString(SystemMsgStyle.Render("  ℹ"+msg.content) + "\n\n")
+
 		case "subagent":
-			// Specialized Sub-Agent Box
 			sb.WriteString(AgentActivityStyle.Render("🤖 Agent Activity:\n"+msg.content) + "\n")
-		case "welcome":
-			// Animated Banner
-			banner := AnimatedBanner(m.frame)
-
-			// Glowing Border Effect
-			borderColor := Green
-			if m.frame%20 > 10 {
-				borderColor = BrightGreen
-			}
-
-			logo := LogoBoxStyle.Copy().
-				BorderForeground(borderColor).
-				Render(banner)
-
-			text := WelcomeTextStyle.Render(fmt.Sprintf("\nWelcome to Aseity! Connected to %s", m.modelName))
-
-			// Center everything roughly based on width (simplified centering)
-			// For a true center we'd need to measure widths, but left-align with padding looks good too.
-
-			sb.WriteString(logo + "\n")
-			sb.WriteString(text + "\n\n")
-
-			// Intro text content
-			lines := strings.Split(msg.content, "\n")
-			// Skip first line of original content as we rendered it custom
-			if len(lines) > 0 {
-				for _, line := range lines[1:] {
-					sb.WriteString(AssistantMsgStyle.Render("  "+line) + "\n")
-				}
-			}
-			sb.WriteString("\n")
 		}
 	}
-	if m.thinking && !m.confirming {
-		statusText := m.getAnimatedStatus()
-		spinnerView := m.spinner.View()
-		switch m.spinnerState {
-		case SpinnerThinking:
-			sb.WriteString(SpinnerThinkingStyle.Render("  "+spinnerView+" ") + ThinkingLabelStyle.Render(statusText) + "\n")
-		case SpinnerTool:
-			sb.WriteString(SpinnerToolStyle.Render("  "+spinnerView+" ") + ToolExecStyle.Render(statusText) + "\n")
-		case SpinnerNetwork:
-			sb.WriteString(WebIconStyle.Render("  "+spinnerView+" ") + InfoStyle.Render(statusText) + "\n")
-		default:
-			sb.WriteString(SpinnerStyle.Render("  "+spinnerView+" ") + statusText + "\n")
+
+	// Spinner handling
+	if m.thinking || m.confirming || m.inputRequest || m.currentTool != "" {
+		spinnerFrame := m.spinner.View()
+		status := m.getAnimatedStatus()
+
+		var spinBlock string
+		if m.currentTool != "" {
+			// Tool is running
+			spinBlock = fmt.Sprintf(" %s %s", spinnerFrame, status)
+			spinBlock = ToolExecStyle.Render(spinBlock)
+		} else {
+			// Just thinking
+			spinBlock = fmt.Sprintf(" %s %s", spinnerFrame, status)
+			// Apply the current spinner style
+			spinBlock = m.spinner.Style.Render(spinBlock)
 		}
+		// Wrap in a subtle box or just margin?
+		// Let's keep it simple but aligned
+		sb.WriteString(spinBlock + "\n")
 	}
+
 	m.viewport.SetContent(sb.String())
 	m.viewport.GotoBottom()
+}
+
+// --- Block Rendering Helpers ---
+
+func (m *Model) renderUserBlock(content string) string {
+	return UserBlockStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			RoleHeaderStyle.Foreground(BrightGreen).Render("USER"),
+			UserMsgStyle.Render(content),
+		),
+	) + "\n"
+}
+
+func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) string {
+	var body string
+	if isWelcome {
+		// Custom banner handling within the block
+		// We expect content to be the text part.
+		// Reconstruct banner?
+		// The original code rendered banner separately.
+		// Let's just render content.
+		body = AssistantMsgStyle.Render(content)
+	} else {
+		// Render markdown
+		rendered, err := m.renderer.Render(content)
+		if err != nil {
+			body = content
+		} else {
+			body = rendered
+		}
+	}
+	body = strings.TrimRight(body, "\n")
+
+	// Special check: Is this a Plan?
+	// If content starts with "# Plan" or similar, maybe distinct style?
+	// For now, standard assistant block.
+
+	return AssistantBlockStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			RoleHeaderStyle.Foreground(Cyan).Render(title),
+			body,
+		),
+	) + "\n"
+}
+
+func (m *Model) renderThinkingBlock(content string) string {
+	if !m.showThinking && content != "" {
+		lines := strings.Count(content, "\n") + 1
+		return ThinkingBlockStyle.Render(fmt.Sprintf("💭 Reasoning (%d lines) [Ctrl+T to expand]", lines)) + "\n"
+	}
+
+	if content == "" {
+		return ""
+	}
+
+	lines := strings.Split(content, "\n")
+	var formatted strings.Builder
+	formatted.WriteString(ThinkingLabelStyle.Render("💭 Reasoning") + "\n")
+
+	maxLines := 15
+	if len(lines) > maxLines {
+		for _, line := range lines[:maxLines] {
+			formatted.WriteString("│ " + line + "\n")
+		}
+		formatted.WriteString(fmt.Sprintf("└─ ... (%d more lines)\n", len(lines)-maxLines))
+	} else {
+		for i, line := range lines {
+			prefix := "│ "
+			if i == len(lines)-1 {
+				prefix = "└─ "
+			}
+			formatted.WriteString(prefix + line + "\n")
+		}
+	}
+
+	return ThinkingBlockStyle.Render(formatted.String()) + "\n"
+}
+
+func (m *Model) renderToolBlock(header, result string) string {
+	// header comes from formatToolCallDisplay, so it's already styled/colored.
+	// But lipgloss styles might strip if we nest? No, usually fine.
+
+	// Ensure header is clean
+	header = strings.TrimSpace(header)
+
+	var content string
+	if result != "" {
+		// Clean result
+		result = strings.TrimSpace(result)
+		if len(result) > 500 {
+			result = result[:500] + "\n... (truncated)"
+		}
+		content = lipgloss.JoinVertical(lipgloss.Left,
+			header,
+			lipgloss.NewStyle().Foreground(MidGray).Render("─────"), // Separator
+			ToolResultStyle.Render(result),
+		)
+	} else {
+		content = header
+	}
+
+	return ToolBlockStyle.Render(content) + "\n"
 }
 
 func (m Model) View() string {
