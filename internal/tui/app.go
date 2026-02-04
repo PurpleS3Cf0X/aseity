@@ -320,6 +320,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Trigger menu on '/' if input is empty
 		if msg.String() == "/" && m.textarea.Value() == "" && !m.thinking && !m.confirming {
 			m.menu.active = true
+			// Reset state to ensure selection is at top and filter is clear
+			m.menu.list.ResetSelected()
+			m.menu.list.ResetFilter()
 			// Forward the '/' to the menu list to activate filtering mode immediately
 			var cmd tea.Cmd
 			m.menu, cmd = m.menu.Update(msg)

@@ -41,7 +41,11 @@ func NewMenuModel() MenuModel {
 		item{title: "/quit", desc: "Exit the application"},
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 30, 14) // Fixed size for menu popup
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(Green).Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(Green).PaddingLeft(1)
+	d.Styles.SelectedDesc = d.Styles.SelectedTitle.Copy().Foreground(DimGreen)
+
+	l := list.New(items, d, 30, 14) // Fixed size for menu popup
 	l.Title = "Commands"
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
