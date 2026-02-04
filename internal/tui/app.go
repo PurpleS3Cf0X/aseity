@@ -368,9 +368,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirming = false
 				m.cancel()
 				m.ctx, m.cancel = context.WithCancel(context.Background())
-				m.agent = agent.New(m.prov, m.toolReg, "") // Reset agent state on hard cancel? Or should we preserve? Current behavior is reset.
-				m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
+				// Preserve conversation history!
+				oldConv := m.agent.Conversation()
+				m.agent = agent.NewWithConversation(m.prov, m.toolReg, oldConv)
+				// m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
 				m.rebuildView()
+				return m, nil
 				return m, nil
 			}
 			m.agent.Conversation().Save()
@@ -1011,16 +1014,18 @@ func (m *Model) renderToolBlock(header, result string) string {
 }
 
 func (m Model) View() string {
-	// --- Header Construction (Claude Code Style) ---
-	// Left Column: Logo/Status
+	// --- Header Construction (Restored Wave Style) ---
+	// Left Column: Animated Banner
+	// We use m.frame to animate the gradient colors
+	logo := AnimatedBanner(m.frame)
+
 	leftContent := lipgloss.JoinVertical(lipgloss.Center,
-		WelcomeTextStyle.Foreground(Green).Render("Aseity Agent"),
-		lipgloss.NewStyle().Foreground(ClaudeAccent).Render("▀▄▀▄▀"),
+		logo,
 		fmt.Sprintf("%s / %s", m.providerName, m.modelName),
-		TokenStyle.Render(fmt.Sprintf("%dk tokens", m.agent.Conversation().EstimatedTokens()/1000)),
+		// Add some breathing room
 	)
 
-	// Right Column: Context/Tips
+	// Right Column: Context/Tips (Vertical stack)
 	contextState := "Active"
 	if m.thinking {
 		contextState = "Thinking..."
@@ -1029,19 +1034,37 @@ func (m Model) View() string {
 	}
 
 	rightContent := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("Status: ")+lipgloss.NewStyle().Foreground(White).Render(contextState),
+		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("STATUS"),
+		lipgloss.NewStyle().Foreground(White).Render(contextState),
 		"",
-		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("Tips:"),
-		lipgloss.NewStyle().Foreground(DimGreen).Render("/help for commands"),
+		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("TIPS"),
+		lipgloss.NewStyle().Foreground(DimGreen).Render("/help"),
+		lipgloss.NewStyle().Foreground(DimGreen).Render("Ctrl+C to quit"),
 	)
 
-	headerInner := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render(leftContent),
-		lipgloss.NewStyle().Foreground(DimGreen).Render("│"),
-		lipgloss.NewStyle().PaddingLeft(2).Render(rightContent),
+	// Layout: Logo on Left, Status on Right, separated by a pipe??
+	// Or just side by side with spacing.
+	// The animated banner is wide (~40 chars).
+
+	headerInner := lipgloss.JoinHorizontal(lipgloss.Center,
+		lipgloss.NewStyle().PaddingLeft(2).Render(leftContent),
+		lipgloss.NewStyle().Width(10).Render(""),                               // Spacer
+		lipgloss.NewStyle().PaddingRight(2).PaddingTop(2).Render(rightContent), // Push status down slightly to align with logo center
 	)
 
-	header := LogoBoxStyle.Width(m.width - 2).Render(headerInner)
+	// Remove the border box (LogoBoxStyle) to fix "boundary too long"
+	// Just render the inner content centered or left-aligned?
+	// User complaint "boundary is too long" -> Border.
+
+	// We'll use a subtle bottom border for the whole header separation if needed, or just space.
+	// Actually, let's keep it minimal.
+	// Just center the whole header block.
+	header := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(DimGreen).
+		Width(m.width).
+		Align(lipgloss.Center).
+		Render(headerInner)
 
 	// --- Input Area (Minimal) ---
 	prompt := lipgloss.NewStyle().Foreground(Green).Bold(true).Render("> ")
