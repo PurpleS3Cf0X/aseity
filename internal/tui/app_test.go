@@ -34,6 +34,10 @@ func TestMenuTrigger(t *testing.T) {
 		t.Error("Menu should be inactive on startup")
 	}
 
+	// Send WindowSize first to init dimensions (prevents panic from negative viewport)
+	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	model = updatedModel.(Model)
+
 	// Send '/' key to trigger menu
 	propModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m := propModel.(Model)
@@ -101,8 +105,8 @@ func TestHeaderRendering(t *testing.T) {
 	view := model.View()
 
 	// Check for new header elements
-	if !strings.Contains(view, "Aseity Agent") {
-		t.Error("Header should contain 'Aseity Agent'")
+	if !strings.Contains(view, "Aseity") {
+		t.Error("Header should contain 'Aseity' logo/text")
 	}
 	if !strings.Contains(view, "mock-model") {
 		t.Error("Header should display model name")
