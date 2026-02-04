@@ -65,8 +65,15 @@ func (s *SandboxRunTool) Execute(ctx context.Context, rawArgs string) (Result, e
 	// OR better, default strictly.
 
 	// Check for Docker
+	dockerCmd := "docker"
 	if _, err := exec.LookPath("docker"); err != nil {
-		return Result{Error: "docker command not found. Please install Docker to use sandbox_run."}, nil
+		// Fallback for macOS Docker Desktop
+		fallback := "/Applications/Docker.app/Contents/Resources/bin/docker"
+		if _, err := os.Stat(fallback); err == nil {
+			dockerCmd = fallback
+		} else {
+			return Result{Error: "docker command not found. Please install Docker to use sandbox_run."}, nil
+		}
 	}
 
 	cwd, err := os.Getwd()
@@ -99,7 +106,7 @@ func (s *SandboxRunTool) Execute(ctx context.Context, rawArgs string) (Result, e
 	dockerArgs = append(dockerArgs, args.Image)
 	dockerArgs = append(dockerArgs, "sh", "-c", args.Command)
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd := exec.CommandContext(ctx, dockerCmd, dockerArgs...)
 
 	// Capture output
 	out, err := cmd.CombinedOutput()
