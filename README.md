@@ -50,7 +50,7 @@ aseity
 On first run, Aseity will:
 1. Check if Ollama is installed (offers to install if not)
 2. Start Ollama if it's not running
-3. Download the default model (qwen2.5:3b)
+3. Download the default model (qwen2.5:14b)
 4. Launch the interactive chat
 
 ## Usage Examples
@@ -131,7 +131,7 @@ aseity models
 # Pull a new model
 aseity pull llama3.2
 aseity pull codellama:34b
-aseity pull qwen2.5:3b
+aseity pull qwen2.5:14b  # Default model
 aseity pull deepseek-r1
 
 # Search HuggingFace for models
@@ -256,7 +256,7 @@ Create `~/.config/aseity/config.yaml`:
 ```yaml
 # Default provider and model
 default_provider: ollama
-default_model: qwen2.5:3b
+default_model: qwen2.5:14b
 
 # Provider configurations
 providers:
@@ -350,7 +350,7 @@ Best for: Privacy, offline use, no API costs
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Pull a model
-ollama pull qwen2.5:3b
+ollama pull qwen2.5:14b
 
 # Run Aseity
 aseity
@@ -416,7 +416,7 @@ aseity setup
 Pull the model first:
 
 ```bash
-aseity pull qwen2.5:3b
+aseity pull qwen2.5:14b
 ```
 
 ### Check service status

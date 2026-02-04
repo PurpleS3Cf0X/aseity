@@ -8,7 +8,7 @@ All settings are stored in `~/.config/aseity/config.yaml`.
 ### Basic Structure
 ```yaml
 default_provider: ollama
-default_model: qwen2.5:3b
+default_model: qwen2.5:14b
 
 providers:
   ollama:
@@ -37,7 +37,7 @@ Best for running models on your own machine (Llama 3, Qwen, Mistral).
     type: openai
     base_url: http://localhost:11434/v1
   ```
-- **Usage**: `aseity --provider ollama --model qwen2.5:3b`
+- **Usage**: `aseity --provider ollama --model qwen2.5:14b`
 
 ### 2. OpenAI
 Best for state-of-the-art reasoning (GPT-4o).

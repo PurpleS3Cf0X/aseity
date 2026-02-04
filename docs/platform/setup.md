@@ -48,7 +48,7 @@ On your first launch, Aseity runs a helpful setup wizard:
 1. **Ollama Check**: It looks for a local installation of [Ollama](https://ollama.ai).
    - If not found, it offers to install it for you.
    - If found but stopped, it attempts to start the service.
-2. **Model Download**: It checks for the default model (`qwen2.5:3b`).
+2. **Model Download**: It checks for the default model (`qwen2.5:14b`).
    - If missing, it will pull it automatically (approx 2GB download).
 3. **Launch**: Once ready, it drops you directly into the chat interface.
 
