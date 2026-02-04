@@ -154,6 +154,47 @@ aseity setup
 aseity setup --docker
 ```
 
+## Recommended Models
+
+Aseity works best with models that support **function calling** or can follow structured output formats. Here's a guide:
+
+### ✅ Best for Tool Use (Agentic Workflows)
+These models reliably execute commands instead of explaining them:
+
+| Model | Size | RAM Required | Best For |
+|-------|------|--------------|----------|
+| `qwen2.5:14b` | ~8.5GB | 10GB+ | **Recommended** - Best balance of speed & capability |
+| `qwen2.5:32b` | ~19GB | 24GB+ | Production workflows, complex tasks |
+| `deepseek-r1:7b` | ~4.5GB | 6GB+ | Reasoning-focused, good tool use |
+| `llama3.2:8b` | ~5GB | 8GB+ | Fast, decent tool support |
+
+### ⚠️ Limited Tool Support
+These models work but may explain instead of executing:
+
+| Model | Size | RAM Required | Notes |
+|-------|------|--------------|-------|
+| `qwen2.5:3b` | ~2GB | 4GB | **Default** - Fast but inconsistent tool use |
+| `llama3.2:3b` | ~2GB | 4GB | Similar limitations to qwen2.5:3b |
+
+### 🚀 Cloud Models (Always Reliable)
+- `gpt-4o` (OpenAI) - Excellent function calling
+- `claude-sonnet-4` (Anthropic) - Best reasoning + tool use
+- `gemini-2.0-flash` (Google) - Fast, reliable
+
+### Upgrading Your Model
+
+```bash
+# Pull the recommended model
+ollama pull qwen2.5:14b
+
+# Use it
+aseity --model qwen2.5:14b
+```
+
+**Your System**: M4 Mac with 8GB RAM can comfortably run `qwen2.5:14b` ✅
+
+
+
 ### Advanced Capabilities
 
 #### Recursive Agents
