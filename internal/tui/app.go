@@ -193,15 +193,15 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	)
 
 	m := Model{
-		viewport:               vp,
-		textarea:               ta,
-		spinner:                sp,
-		showThinking:           true,
-		providerName:           provName,
-		modelName:              modelName,
-		prov:                   prov,
-		toolReg:                toolReg,
-		toolReg:                toolReg,
+		viewport:     vp,
+		textarea:     ta,
+		spinner:      sp,
+		showThinking: true,
+		providerName: provName,
+		modelName:    modelName,
+		prov:         prov,
+		toolReg:      toolReg,
+
 		ctx:                    ctx,
 		cancel:                 cancel,
 		renderer:               r,
