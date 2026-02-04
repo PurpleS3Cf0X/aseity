@@ -283,7 +283,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// No selection (custom slash command?), use what was typed
 					typed := m.menu.list.FilterValue()
 					m.menu.active = false
-					m.textarea.SetValue(typed)
+					m.textarea.SetValue("/" + typed)
 					m.textarea.Focus()
 				}
 			}
@@ -291,7 +291,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "esc" && m.menu.active {
 				typed := m.menu.list.FilterValue()
 				m.menu.active = false
-				m.textarea.SetValue(typed)
+				m.textarea.SetValue("/" + typed)
 				m.textarea.Focus()
 				return m, nil
 			}
@@ -320,8 +320,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Trigger menu on '/' if input is empty
 		if msg.String() == "/" && m.textarea.Value() == "" && !m.thinking && !m.confirming {
 			m.menu.active = true
-			m.menu.list.Select(0) // Reset selection
-			return m, nil
+			// Forward the '/' to the menu list to activate filtering mode immediately
+			var cmd tea.Cmd
+			m.menu, cmd = m.menu.Update(msg)
+			return m, cmd
 		}
 
 		// Scroll viewport with Ctrl+Up/Down or PgUp/PgDown (when not typing)
