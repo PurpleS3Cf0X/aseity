@@ -85,4 +85,5 @@ func RegisterDefaults(r *Registry, allowedCmds, disallowedCmds []string) {
 	r.Register(NewCreateAgentTool())
 	r.Register(NewDeleteAgentTool())
 	r.Register(NewListCustomAgentsTool())
+	r.Register(NewSandboxRunTool())
 }
