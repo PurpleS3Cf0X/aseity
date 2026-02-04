@@ -13,7 +13,8 @@ import (
 	"github.com/jeanpaul/aseity/internal/tools"
 )
 
-const MaxTurns = 50 // prevent infinite agent loops
+const MaxTurns = 50             // prevent infinite agent loops
+const MaxQualityGateRetries = 3 // prevent quality gate retry exhaustion
 
 type Event struct {
 	Type     EventType
@@ -91,6 +92,20 @@ func (a *Agent) Conversation() *Conversation { return a.conv }
 func (a *Agent) Depth() int                  { return a.depth }
 
 func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
+	// Enforce buffering requirement for parallel execution safety
+	if cap(events) < 10 {
+		select {
+		case events <- Event{
+			Type:  EventError,
+			Error: "events channel must be buffered (minimum 10, recommended 100) to prevent deadlocks during parallel tool execution",
+			Done:  true,
+		}:
+		default:
+			// Can't even send error - channel is blocked
+		}
+		return
+	}
+
 	if a.OriginalGoal == "" {
 		a.OriginalGoal = userMsg
 	}
@@ -99,6 +114,7 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 }
 
 func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
+	qualityGateRetries := 0
 	for turn := 0; turn < MaxTurns; turn++ {
 		// Construct the context with a dynamic reminder
 		msgs := a.conv.Messages()
@@ -210,19 +226,24 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 				}
 
 				if !passed {
+					qualityGateRetries++
+					if qualityGateRetries >= MaxQualityGateRetries {
+						events <- Event{
+							Type:  EventError,
+							Error: fmt.Sprintf("Quality gate failed after %d retries. Last feedback: %s", MaxQualityGateRetries, feedback),
+							Done:  true,
+						}
+						return
+					}
+
 					// REJECT - Insert system message and Continue Loop
-					rejectMsg := fmt.Sprintf("⛔ QUALITY GATE FAILED.\nYour response was rejected by the Critic.\nFeedback: %s\n\nYou MUST fix these issues and try again. Do not repeat the same mistake.", feedback)
+					rejectMsg := fmt.Sprintf("⛔ QUALITY GATE FAILED (Attempt %d/%d).\nYour response was rejected by the Critic.\nFeedback: %s\n\nYou MUST fix these issues and try again. Do not repeat the same mistake.", qualityGateRetries, MaxQualityGateRetries, feedback)
 					a.conv.AddSystem(rejectMsg)
 					events <- Event{Type: EventError, Error: "Quality Gate Rejected: " + feedback, Done: false}
-					// Actually EventError usually signals stopping?
-					// No, we want to CONTINUE the loop.
-					// So send delta or something? Or just nothing and loop.
-					// Sending EventDelta might confuse TUI into thinking it's assistant text.
-					// Let's rely on the internal loop continuing.
 					continue
 				} else {
-					// PASS - Allow finish
-					// Maybe inform user?
+					// PASS - Reset counter and allow finish
+					qualityGateRetries = 0
 					events <- Event{Type: EventJudgeCall, Text: "Quality Gate Passed. ✅"}
 				}
 			}
@@ -246,7 +267,6 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 		// 1. Execute Parallel Group
 		if len(parallelGroup) > 0 {
 			var wg sync.WaitGroup
-			var mu sync.Mutex // Protect conversation writes
 			wg.Add(len(parallelGroup))
 
 			for _, tc := range parallelGroup {
@@ -261,14 +281,9 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 
 					res, err := a.tools.Execute(ctx, tc.Name, tc.Args, nil)
 
-					// Lock before writing to conversation
-					mu.Lock()
-					defer mu.Unlock()
-
 					if err != nil {
 						errMsg := fmt.Sprintf("Error executing %s: %v", tc.Name, err)
 						a.conv.AddToolResult(tc.ID, errMsg)
-						// Event channel is safe
 						events <- Event{Type: EventError, Error: errMsg, ToolID: tc.ID}
 						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: errMsg}
 						return
@@ -284,7 +299,26 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 				}(tc)
 			}
 
-			wg.Wait()
+			// Wait for parallel tools with context awareness
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+				// All parallel tools completed successfully
+			case <-ctx.Done():
+				// Context cancelled - log warning and proceed
+				// Goroutines may still be running but we can't wait forever
+				events <- Event{
+					Type:  EventError,
+					Error: "Parallel tool execution interrupted by cancellation",
+					Done:  false,
+				}
+				// Continue to sequential tools or next iteration
+			}
 		}
 
 		// 2. Execute Sequential Group

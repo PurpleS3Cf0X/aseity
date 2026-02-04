@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeanpaul/aseity/internal/provider"
 )
 
 type Conversation struct {
+	mu          sync.Mutex
 	messages    []provider.Message
 	maxTokens   int // approximate context window limit
 	totalTokens int // running estimate
@@ -30,23 +32,31 @@ func NewConversation() *Conversation {
 }
 
 func (c *Conversation) SetMaxTokens(max int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if max > 0 {
 		c.maxTokens = max
 	}
 }
 
 func (c *Conversation) AddSystem(content string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.messages = append(c.messages, provider.Message{Role: provider.RoleSystem, Content: content})
 	c.totalTokens += estimateTokens(content)
 }
 
 func (c *Conversation) AddUser(content string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.messages = append(c.messages, provider.Message{Role: provider.RoleUser, Content: content})
 	c.totalTokens += estimateTokens(content)
 	c.compactIfNeeded()
 }
 
 func (c *Conversation) AddAssistant(content string, toolCalls []provider.ToolCall) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.messages = append(c.messages, provider.Message{
 		Role: provider.RoleAssistant, Content: content, ToolCalls: toolCalls,
 	})
@@ -57,6 +67,8 @@ func (c *Conversation) AddAssistant(content string, toolCalls []provider.ToolCal
 }
 
 func (c *Conversation) AddToolResult(toolCallID, content string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Truncate very large tool results
 	if len(content) > 30000 {
 		content = content[:30000] + "\n... [truncated]"
@@ -69,14 +81,23 @@ func (c *Conversation) AddToolResult(toolCallID, content string) {
 }
 
 func (c *Conversation) Messages() []provider.Message {
-	return c.messages
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Return copy to prevent external mutation
+	msgs := make([]provider.Message, len(c.messages))
+	copy(msgs, c.messages)
+	return msgs
 }
 
 func (c *Conversation) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.messages)
 }
 
 func (c *Conversation) EstimatedTokens() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.totalTokens
 }
 

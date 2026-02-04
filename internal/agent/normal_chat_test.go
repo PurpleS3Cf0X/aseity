@@ -36,7 +36,7 @@ func TestNormalChat_NoTools(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	events := make(chan Event)
+	events := make(chan Event, 100)
 	go func() {
 		agent.Send(ctx, "What is 2 + 2? Answer with just the number.", events)
 		close(events)
@@ -60,7 +60,7 @@ func TestNormalChat_NoTools(t *testing.T) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel2()
 
-	events2 := make(chan Event)
+	events2 := make(chan Event, 100)
 	go func() {
 		agent.Send(ctx2, "Double that number.", events2)
 		close(events2)

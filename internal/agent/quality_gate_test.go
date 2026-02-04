@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/jeanpaul/aseity/internal/provider"
@@ -36,6 +37,7 @@ func (m *MockProviderGate) Models(ctx context.Context) ([]string, error) {
 
 // MockJudgeTool simulates pass/fail output
 type MockJudgeTool struct {
+	mu         sync.Mutex
 	ShouldPass bool
 }
 
@@ -44,6 +46,8 @@ func (j *MockJudgeTool) Description() string     { return "Mock judge" }
 func (j *MockJudgeTool) Parameters() any         { return nil }
 func (j *MockJudgeTool) NeedsConfirmation() bool { return false }
 func (j *MockJudgeTool) Execute(ctx context.Context, args string) (tools.Result, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	status := "fail"
 	feedback := "Needs improvement"
 	if j.ShouldPass {
@@ -101,10 +105,11 @@ func TestQualityGate_Rejection(t *testing.T) {
 		t.Logf("Received Event: Type=%d Text='%s' Error='%s' Done=%v", evt.Type, evt.Text, evt.Error, evt.Done)
 		if evt.Type == EventJudgeCall {
 			judgeCalled++
-			// After first judge call (fail), next one should be pass?
-			// We can hack the judge pointer?
+			// After first judge call (fail), next one should be pass
 			if judgeCalled == 1 {
+				judge.mu.Lock()
 				judge.ShouldPass = true // Allow pass on second try
+				judge.mu.Unlock()
 			}
 		}
 		if evt.Type == EventError && evt.Done == false {
