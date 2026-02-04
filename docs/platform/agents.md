@@ -60,4 +60,23 @@ system_prompt: |
   You are a Linux Expert. You excel at bash scripting...
 knowledge_paths:
   - /usr/share/doc
+  - /usr/share/doc
 ```
+
+## Auto-Verification Loop (v1.1.2)
+You can spawn agents that automatically verify their own work using the built-in Critic.
+
+**Usage:**
+- When spawning an agent (via tool or future commands), set `require_review: true`.
+- The agent will:
+  1. Draft a solution.
+  2. Ask the Critic "Does this satisfy the goal?".
+  3. If No, retry with feedback (Max 3 times).
+
+## Default Personas
+Aseity ships with built-in personas you can use immediately.
+
+### Consultant
+Role: Consultant & Architect
+- Behavior: Helpful, plans before acting, asks clarifying questions.
+- Usage: `aseity "Ask the Consultant to review this"`

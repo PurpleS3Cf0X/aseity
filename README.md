@@ -22,6 +22,8 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Auto-approve** — Optional `-y` flag to skip permission prompts for trusted sessions
 - **Headless Mode** — Scriptable CLI mode for automation (`aseity --headless "scan" > report.txt`)
 - **Smart Output** — Automatically truncates and saves large tool outputs (e.g., nmap scans) to files
+- **Hybrid Evaluation** — **New in v1.1.2!** Built-in "Judge" tool allows agents to request semantic review of their work
+- **Auto-Verification** — **New in v1.1.2!** Agents can self-correct by looping through a draft-review-fix cycle automatically
 
 ## Quick Start
 
@@ -165,6 +167,17 @@ The main agent will delegate the task, wait for the sub-agent to finish, and pre
 #### Safety & Large Outputs
 - **Safety**: `aseity -y` bypasses confirmation, but dangerous commands (like `rm -rf /`) remain blocked by default.
 - **Smart Truncation**: If a tool (like `nmap` or `grep`) produces thousands of lines, Aseity automatically saves the **full output** to a temp file and only shows a preview to the agent to prevent context overflow.
+
+### Hybrid Evaluation & Auto-Verification (New in v1.1.2)
+Aseity now includes a "Trust but Verify" system.
+- **Judge Tool**: An agent can ask for a critique: `judge_output(original_goal="...", content="...")`.
+- **Auto-Loop**: When spawning a sub-agent, you can set `require_review: true`. The worker agent will be automatically peer-reviewed by a "Critic" agent. If the critic rejects the work, the worker is re-spawned with feedback to fix it (up to 3 times).
+
+### Consultant Persona (Default)
+Aseity comes with a built-in "Consultant" persona that is proactive and inquisitive.
+```bash
+aseity "Ask the Consultant to review my architecture plans"
+```
 
 
 ### Custom Agents (New in v1.1.0+)

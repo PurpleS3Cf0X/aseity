@@ -52,3 +52,17 @@ A powerful crawler using a headless Chrome browser.
 Aseity includes a robust fallback mechanism. If a model tries to call a tool but fails to use the correct API format (common with smaller local models), Aseity scans its text response for patterns like:
 `[TOOL:bash|{"command": "ls"}]`
 And executes it automatically. This ensures high reliability across different LLM providers.
+
+## Review Tools (v1.1.2)
+
+### `judge_output`
+Spawns a specialized "Critic" agent to semantic review your work.
+- **Parameters**: 
+  - `original_goal`: The user's original request.
+  - `content`: The output to review (code, plan, text).
+- **Output**: JSON verdict (`pass` or `fail`) with feedback.
+- **Use Case**:
+  > "Review this Python script to ensure it handles edge cases."
+  ```bash
+  judge_output(original_goal="Write robust python script", content="...")
+  ```
