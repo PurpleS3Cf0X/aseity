@@ -274,15 +274,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selectedItem != nil {
 					cmdStr := selectedItem.(item).Title()
 					m.menu.active = false
-					// Execute immediately or paste to input?
-					// Claude Code behavior: paste to input or exec.
-					// Let's execute immediately for known commands, else paste.
 					if cmdStr == "/quit" {
 						return m, tea.Quit
 					}
-					m.textarea.SetValue(cmdStr) // Paste
+					m.textarea.SetValue(cmdStr)
+					m.textarea.Focus()
+				} else {
+					// No selection (custom slash command?), use what was typed
+					typed := m.menu.list.FilterValue()
+					m.menu.active = false
+					m.textarea.SetValue(typed)
 					m.textarea.Focus()
 				}
+			}
+			// Handle Esc to exit menu but keep typed text
+			if msg.String() == "esc" && m.menu.active {
+				typed := m.menu.list.FilterValue()
+				m.menu.active = false
+				m.textarea.SetValue(typed)
+				m.textarea.Focus()
+				return m, nil
 			}
 			return m, cmd
 		}
