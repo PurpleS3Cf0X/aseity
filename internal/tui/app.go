@@ -245,6 +245,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textarea.Blink,
 		m.spinner.Tick,
+		tea.EnableMouseCellMotion, // Enable Mouse Support
 	)
 }
 
@@ -374,7 +375,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
 				m.rebuildView()
 				return m, nil
-				return m, nil
 			}
 			m.agent.Conversation().Save()
 			m.cancel()
@@ -432,6 +432,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			go m.agent.Send(m.ctx, text, m.eventCh)
 			return m, m.waitForEvent()
 		}
+
+	case tea.MouseMsg:
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
 
 	case agentEventMsg:
 		evt := agent.Event(msg)
@@ -529,14 +534,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, cmd)
 
-	case tea.MouseMsg:
-		// Handle mouse scroll
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.viewport.LineUp(3)
-		case tea.MouseButtonWheelDown:
-			m.viewport.LineDown(3)
-		}
+	//	case tea.MouseMsg:
+	// Removed duplicate manual handling in favor of viewport.Update
 	default:
 		// No-op
 	}

@@ -117,7 +117,7 @@ func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, p
 
 			case agent.EventError:
 				fmt.Fprintf(os.Stderr, "\n[Error: %s]\n", evt.Error)
-				return fmt.Errorf(evt.Error)
+				return fmt.Errorf("%s", evt.Error)
 
 			case agent.EventDone:
 				fmt.Fprintln(os.Stderr, "\n[Done]")
