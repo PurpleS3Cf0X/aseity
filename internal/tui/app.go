@@ -159,6 +159,7 @@ type Model struct {
 	inputRequest           bool
 	currentThinkingSpinner spinner.Spinner
 	currentThinkingStyle   lipgloss.Style
+	menu                   MenuModel
 }
 
 type chatMessage struct {
@@ -168,14 +169,15 @@ type chatMessage struct {
 
 func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation, qualityGate bool) Model {
 	ta := textarea.New()
-	ta.Placeholder = "Type your message... (Enter to send, Esc to quit)"
+	ta.Placeholder = "Type your message..."
 	ta.Focus()
 	ta.CharLimit = 0
-	ta.SetHeight(3)
+	ta.SetHeight(1) // Minimal height
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ta.FocusedStyle.Base = lipgloss.NewStyle().Foreground(White)
 	ta.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(DimGreen)
 	ta.BlurredStyle.Base = lipgloss.NewStyle().Foreground(DarkGreen)
+	ta.ShowLineNumbers = false
 
 	sp := spinner.New()
 	sp.Spinner = ThinkingSpinner
@@ -204,6 +206,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		renderer:               r,
 		currentThinkingSpinner: ThinkingSpinner,
 		currentThinkingStyle:   SpinnerThinkingStyle,
+		menu:                   NewMenuModel(), // Init menu
 	}
 
 	sysPrompt := agent.BuildSystemPrompt()
@@ -252,14 +255,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		headerH := 3
-		inputH := 6
+		headerH := 8 // Estimated new header height
+		inputH := 3  // Minimal input
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - headerH - inputH
 		m.textarea.SetWidth(msg.Width - 4)
 		m.rebuildView()
 
 	case tea.KeyMsg:
+		// Menu Handling
+		if m.menu.active {
+			var cmd tea.Cmd
+			m.menu, cmd = m.menu.Update(msg)
+
+			// Handle selection
+			if msg.String() == "enter" && m.menu.active {
+				selectedItem := m.menu.list.SelectedItem()
+				if selectedItem != nil {
+					cmdStr := selectedItem.(item).Title()
+					m.menu.active = false
+					// Execute immediately or paste to input?
+					// Claude Code behavior: paste to input or exec.
+					// Let's execute immediately for known commands, else paste.
+					if cmdStr == "/quit" {
+						return m, tea.Quit
+					}
+					m.textarea.SetValue(cmdStr) // Paste
+					m.textarea.Focus()
+				}
+			}
+			return m, cmd
+		}
+
 		// Handle confirmation prompt
 		if m.confirming {
 			switch msg.String() {
@@ -276,6 +303,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuildView()
 				return m, m.waitForEvent()
 			}
+			return m, nil
+		}
+
+		// Trigger menu on '/' if input is empty
+		if msg.String() == "/" && m.textarea.Value() == "" && !m.thinking && !m.confirming {
+			m.menu.active = true
+			m.menu.list.Select(0) // Reset selection
 			return m, nil
 		}
 
@@ -315,6 +349,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			text := strings.TrimSpace(m.textarea.Value())
+
+			// If empty and menu not active, maybe do nothing?
+			// "Enter" on empty usually does nothing.
 
 			// Handle Tool Input Request
 			if m.inputRequest {
@@ -461,10 +498,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.MouseButtonWheelDown:
 			m.viewport.LineDown(3)
 		}
+	default:
+		// No-op
 	}
 
 	var cmd tea.Cmd
-	if !m.thinking && !m.confirming {
+	// Input Handling (only if menu not active)
+	if !m.thinking && !m.confirming && !m.menu.active {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -935,56 +975,61 @@ func (m *Model) renderToolBlock(header, result string) string {
 }
 
 func (m Model) View() string {
-	thinkLabel := ""
-	if m.showThinking {
-		thinkLabel = " [thinking:on]"
+	// --- Header Construction (Claude Code Style) ---
+	// Left Column: Logo/Status
+	leftContent := lipgloss.JoinVertical(lipgloss.Center,
+		WelcomeTextStyle.Foreground(Green).Render("Aseity Agent"),
+		lipgloss.NewStyle().Foreground(ClaudeAccent).Render("▀▄▀▄▀"),
+		fmt.Sprintf("%s / %s", m.providerName, m.modelName),
+		TokenStyle.Render(fmt.Sprintf("%dk tokens", m.agent.Conversation().EstimatedTokens()/1000)),
+	)
+
+	// Right Column: Context/Tips
+	contextState := "Active"
+	if m.thinking {
+		contextState = "Thinking..."
+	} else if m.currentTool != "" {
+		contextState = "Running Tool..."
 	}
 
-	// Token counter
-	tokenInfo := ""
-	if m.agent != nil {
-		tokens := m.agent.Conversation().EstimatedTokens()
-		if tokens > 0 {
-			tokenInfo = fmt.Sprintf(" ~%dk", tokens/1000)
-		}
+	rightContent := lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("Status: ")+lipgloss.NewStyle().Foreground(White).Render(contextState),
+		"",
+		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("Tips:"),
+		lipgloss.NewStyle().Foreground(DimGreen).Render("/help for commands"),
+	)
+
+	headerInner := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(40).Align(lipgloss.Center).Render(leftContent),
+		lipgloss.NewStyle().Foreground(DimGreen).Render("│"),
+		lipgloss.NewStyle().PaddingLeft(2).Render(rightContent),
+	)
+
+	header := LogoBoxStyle.Width(m.width - 2).Render(headerInner)
+
+	// --- Input Area (Minimal) ---
+	prompt := lipgloss.NewStyle().Foreground(Green).Bold(true).Render("> ")
+	if m.thinking {
+		prompt = lipgloss.NewStyle().Foreground(Purple).Bold(true).Render("● ")
+	} else if m.confirming {
+		prompt = lipgloss.NewStyle().Foreground(Amber).Bold(true).Render("? ")
 	}
 
-	header := StatusProviderStyle.Render(" "+m.providerName) +
-		StatusBarStyle.Render(" "+m.modelName+" ") +
-		StatusBarStyle.Copy().Width(m.width-lipgloss.Width(m.providerName)-lipgloss.Width(m.modelName)-6-len(thinkLabel)-len(tokenInfo)).
-			Render("aseity") +
-		TokenStyle.Render(tokenInfo) +
-		HelpStyle.Render(thinkLabel)
-	separator := SeparatorStyle.Render(strings.Repeat("─", m.width))
+	input := lipgloss.JoinHorizontal(lipgloss.Top,
+		prompt,
+		m.textarea.View(),
+	)
 
-	inputStyle := InputBorderStyle
-	if m.confirming {
-		inputStyle = ConfirmInputStyle
-	} else if !m.thinking {
-		inputStyle = InputActiveStyle
-	}
-	input := inputStyle.Width(m.width - 4).Render(m.textarea.View())
+	// --- Footer ---
+	keyStyle := lipgloss.NewStyle().Foreground(DimGreen)
+	help := keyStyle.Render("Enter: send  •  Alt+Enter: newline  •  /help  •  Esc: quit")
 
-	keyStyle := lipgloss.NewStyle().Foreground(MintGreen)
-	sepStyle := lipgloss.NewStyle().Foreground(DimGreen)
-
-	help := ""
-	if m.confirming {
-		help = "  " +
-			SuccessStyle.Render("y") + sepStyle.Render(":approve  ") +
-			ErrorStyle.Render("n") + sepStyle.Render(":deny  ") +
-			WarningStyle.Render("Ctrl+C") + sepStyle.Render(":cancel")
-	} else {
-		help = "  " +
-			keyStyle.Render("Enter") + sepStyle.Render(":send  ") +
-			keyStyle.Render("Alt+Enter") + sepStyle.Render(":newline  ") +
-			keyStyle.Render("Ctrl+T") + sepStyle.Render(":thinking  ") +
-			keyStyle.Render("Ctrl+C") + sepStyle.Render(":cancel  ") +
-			keyStyle.Render("Esc") + sepStyle.Render(":quit  ") +
-			keyStyle.Render("/help")
-	}
-
-	return header + "\n" + separator + "\n" + m.viewport.View() + "\n" + input + "\n" + help
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		m.viewport.View(),
+		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
+		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
+	)
 }
 
 func truncate(s string, n int) string {

@@ -19,16 +19,17 @@ var (
 	White       = lipgloss.Color("#FFFFFF")
 
 	// Accent colors — Claude Code inspired
-	Purple     = lipgloss.Color("#A855F7") // Thinking/reasoning
-	DimPurple  = lipgloss.Color("#7C3AED") // Thinking text
-	Orange     = lipgloss.Color("#FF9500") // Warnings/confirmations
-	Amber      = lipgloss.Color("#FFB000") // Warm accent (Claude-like)
-	Gold       = lipgloss.Color("#FFD700") // Highlights
-	Blue       = lipgloss.Color("#3B82F6") // Links/info
-	Red        = lipgloss.Color("#EF4444") // Errors
-	Magenta    = lipgloss.Color("#EC4899") // Special actions
-	SoftYellow = lipgloss.Color("#FBBF24") // Soft highlights
-	MintGreen  = lipgloss.Color("#34D399") // Success indicators
+	Purple       = lipgloss.Color("#A855F7") // Thinking/reasoning
+	DimPurple    = lipgloss.Color("#7C3AED") // Thinking text
+	Orange       = lipgloss.Color("#FF9500") // Warnings/confirmations
+	ClaudeAccent = lipgloss.Color("#00FF41") // Reverted to Green (Matrix style) for user theme
+	Amber        = lipgloss.Color("#FFB000") // Warm accent (Claude-like)
+	Gold         = lipgloss.Color("#FFD700") // Highlights
+	Blue         = lipgloss.Color("#3B82F6") // Links/info
+	Red          = lipgloss.Color("#EF4444") // Errors
+	Magenta      = lipgloss.Color("#EC4899") // Special actions
+	SoftYellow   = lipgloss.Color("#FBBF24") // Soft highlights
+	MintGreen    = lipgloss.Color("#34D399") // Success indicators
 
 	// New Styles for TUI Improvements
 	ThinkingColor      = lipgloss.Color("#6B7280") // Gray/Dim
@@ -111,16 +112,12 @@ var (
 				BorderForeground(Amber).
 				Padding(0, 1)
 
-	// Input — Animated border feel
+	// Input — Minimal "Claude Code" style (Prompt >)
 	InputBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(DimGreen).
-				Padding(0, 1)
+				Foreground(Green)
 
 	InputActiveStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(Amber).
-				Padding(0, 1)
+				Foreground(Green)
 
 	// Spinner — Multiple styles for different states
 	SpinnerStyle = lipgloss.NewStyle().
@@ -198,12 +195,12 @@ var (
 	// Logo & Welcome Styles
 	LogoBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(Green).
-			Padding(1, 2).
+			BorderForeground(ClaudeAccent).
+			Padding(0, 1).
 			Margin(1, 0)
 
 	WelcomeTextStyle = lipgloss.NewStyle().
-				Foreground(Cyan).
+				Foreground(Green).
 				Bold(true).
 				Align(lipgloss.Center)
 
