@@ -205,28 +205,13 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		cancel:                 cancel,
 		renderer:               r,
 		currentThinkingSpinner: ThinkingSpinner,
-	// Init menu
-	menu := NewMenuModel()
-
-    // Ensure viewport handles mouse events
-    vp.MouseWheelEnabled = true
-
-	m := Model{
-		viewport:               vp,
-		textarea:               ta,
-		spinner:                sp,
-		showThinking:           true,
-		providerName:           provName,
-		modelName:              modelName,
-		prov:                   prov,
-		toolReg:                toolReg,
-		ctx:                    ctx,
-		cancel:                 cancel,
-		renderer:               r,
 		currentThinkingSpinner: ThinkingSpinner,
 		currentThinkingStyle:   SpinnerThinkingStyle,
-		menu:                   menu,
+		menu:                   NewMenuModel(), // Init menu directly
 	}
+
+	// Ensure viewport handles mouse events
+	m.viewport.MouseWheelEnabled = true
 
 	sysPrompt := agent.BuildSystemPrompt()
 
@@ -453,21 +438,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-        // Explicitly handle scroll wheel to ensure it works
-        if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
-             switch msg.Button {
-             case tea.MouseButtonWheelUp:
-                 m.viewport.LineUp(3)
-             case tea.MouseButtonWheelDown:
-                 m.viewport.LineDown(3)
-             default:
-                  // For clicks or motion, let viewport handle it
-                  var cmd tea.Cmd
-                  m.viewport, cmd = m.viewport.Update(msg)
-                  return m, cmd
-             }
-             return m, nil
-        }
+		// Explicitly handle scroll wheel to ensure it works
+		if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.viewport.LineUp(3)
+			case tea.MouseButtonWheelDown:
+				m.viewport.LineDown(3)
+			default:
+				// For clicks or motion, let viewport handle it
+				var cmd tea.Cmd
+				m.viewport, cmd = m.viewport.Update(msg)
+				return m, cmd
+			}
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
 		return m, cmd
@@ -941,14 +926,14 @@ func (m *Model) rebuildView() {
 	}
 
 	// Sticky Bottom Logic
-    // Only scroll to bottom if we were already there OR if we are initiating (empty content)
-    wasAtBottom := m.viewport.AtBottom()
-    
+	// Only scroll to bottom if we were already there OR if we are initiating (empty content)
+	wasAtBottom := m.viewport.AtBottom()
+
 	m.viewport.SetContent(sb.String())
-    
-    if wasAtBottom || len(m.messages) <= 1 {
-	    m.viewport.GotoBottom()
-    }
+
+	if wasAtBottom || len(m.messages) <= 1 {
+		m.viewport.GotoBottom()
+	}
 }
 
 // --- Block Rendering Helpers ---
