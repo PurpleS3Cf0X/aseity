@@ -1035,12 +1035,38 @@ func (m Model) View() string {
 	keyStyle := lipgloss.NewStyle().Foreground(DimGreen)
 	help := keyStyle.Render("Enter: send  •  Alt+Enter: newline  •  /help  •  Esc: quit")
 
-	return lipgloss.JoinVertical(lipgloss.Left,
+	// Render content
+	view := lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		m.viewport.View(),
 		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
 		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
 	)
+
+	// Overlay Menu if active
+	if m.menu.active {
+		// Place menu above the input area
+		// Since absolute positioning is hard without specific lipgloss.Place logic relative to window height,
+		// we can try to join it vertically above the input?
+		// But Viewport uses flex height.
+		// Better: Use Place() relative to bottom-left?
+
+		// Simpler approach: Just render it AT THE BOTTOM, shifting help down?
+		// Or actually, popups are hard.
+		// Let's render it ABOVE the input.
+
+		// Refactor view structure to include menu
+		menuView := m.menu.View()
+
+		return lipgloss.JoinVertical(lipgloss.Left,
+			header,
+			m.viewport.View(),
+			menuView, // Menu sits here
+			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
+			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
+		)
+	}
+	return view
 }
 
 func truncate(s string, n int) string {
