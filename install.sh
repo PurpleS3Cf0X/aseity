@@ -113,14 +113,10 @@ elif command -v wget >/dev/null 2>&1; then
     LATEST=$(wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
 fi
 
-if [ -z "$LATEST" ]; then
-    # No release yet, build from source
-    info "No binary release found for this detection. Building from source..."
-
-    # Ensure dependencies for building
-    ensure_cmd git git
-    ensure_cmd go golang
-
+# Check for Go and Git to build from source (Preferred for active dev)
+if command -v go >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    info "Go and Git detected. Building latest version from source..."
+    
     TMPDIR=$(mktemp -d)
     trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -129,6 +125,9 @@ if [ -z "$LATEST" ]; then
 
     info "Building..."
     cd "$TMPDIR/aseity"
+    # Build with version info injected?
+    # Usually handled by main.go default, or we can inject ldflags if needed.
+    # For now, simplistic build.
     CGO_ENABLED=0 go build -ldflags="-s -w" -o "${BINARY}" ./cmd/aseity
 
     info "Installing to ${INSTALL_DIR}..."
@@ -142,8 +141,16 @@ if [ -z "$LATEST" ]; then
         fi
     fi
 
-    success "Installed aseity $(${INSTALL_DIR}/${BINARY} --version)"
+    success "Installed aseity (latest from source)"
     exit 0
+fi
+
+if [ -z "$LATEST" ]; then
+    # No release yet, build from source logic (Fallback if go was missing but added later? Actually logic above covers it)
+    # If we are here, it means we DON'T have go/git, OR we purposely fell through.
+    # But if we don't have go/git, we can't build.
+    
+    error "No binary release found and 'go'/'git' not available to build from source."
 fi
 
 info "Latest version: ${LATEST}"
