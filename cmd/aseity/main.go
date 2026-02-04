@@ -467,6 +467,7 @@ func setupAgentEnv(cfg *config.Config, provName, modelName string, allowAll bool
 	agentMgr := agent.NewAgentManager(prov, toolReg, 3)
 	toolReg.Register(tools.NewSpawnAgentTool(agentMgr))
 	toolReg.Register(tools.NewListAgentsTool(agentMgr))
+	toolReg.Register(tools.NewJudgeTool(agentMgr))
 
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
