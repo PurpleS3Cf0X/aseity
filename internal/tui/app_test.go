@@ -44,9 +44,9 @@ func TestMenuTrigger(t *testing.T) {
 
 	// Verify View contains menu specific styling (e.g. LogoBox)
 	view := m.View()
-	// Checks for the border character or specific menu content
-	if !strings.Contains(view, "/help") {
-		t.Error("View should display menu items like '/help'")
+	// Check for a menu-specific item that is NOT in the footer help text
+	if !strings.Contains(view, "/compact") {
+		t.Error("View should display menu items like '/compact'")
 	}
 }
 
