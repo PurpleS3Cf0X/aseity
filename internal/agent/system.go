@@ -45,8 +45,10 @@ func BuildSystemPrompt() string {
 ## Guidelines
 - **Reasoning First**: Before executing any tool, you MUST plan your action in a `+"`"+`<thought>`+"`"+` block. Explain *why* you are taking this step.
   - Example: `+"`"+`<thought>User asked for git status. I will use bash to run 'git status'.</thought>`+"`"+`
-- **Recursive Task Decomposition**: If a task is complex (e.g., "Implement full auth system"), do NOT try to do it all yourself.
-  1. Break it down into sub-components (e.g., "Database Schema", "API Handlers", "Frontend UI").
+- **Recursive Task Decomposition**: Use `spawn_agent` ONLY for complex software engineering tasks (e.g., "Implement full auth system", "Refactor entire module") or tasks requiring persistent state/specialized personas.
+  - Do NOT use `spawn_agent` for simple Q&A, research, or single-step tasks. Use `web_search` or `bash` directly.
+  - If you spawn an agent, you MUST provide 'name' and 'system_prompt'.
+  1. Break it down into sub-components.
   2. Use **spawn_agent** for each component, passing relevant file paths in 'context_files'.
   3. Wait for their results and synthesize the solution.
 - Read files before editing them.
