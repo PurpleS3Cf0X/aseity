@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.11.4] - 2026-02-05
+
+### Fixed
+- **Token Usage Display**: Now properly appends to message content
+  - Previous implementation was overwritten by rebuildView()
+  - Token usage now persists as part of the assistant message
+  - Displays after each response in plain text format
+  - Format: `Tokens: ~X → ~Y (~Z total, estimated)`
+
+### Technical Details
+- Token usage appended to last assistant message content
+- Survives viewport rebuilds
+- Removed lipgloss styling to ensure compatibility with markdown rendering
+
+---
+
 ## [2.11.3] - 2026-02-05
 
 ### Fixed

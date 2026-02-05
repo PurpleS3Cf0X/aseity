@@ -1012,14 +1012,10 @@ func (m *Model) rebuildView() {
 	}
 
 	// Sticky Bottom Logic
-	// Only scroll to bottom if we were already there OR if we are initiating (empty content)
-	wasAtBottom := m.viewport.AtBottom()
-
+	// Always scroll to bottom to show latest content (including token usage)
+	// This was previously conditional (wasAtBottom) but users expect to see new responses
 	m.viewport.SetContent(sb.String())
-
-	if wasAtBottom || len(m.messages) <= 1 {
-		m.viewport.GotoBottom()
-	}
+	m.viewport.GotoBottom()
 }
 
 // --- Block Rendering Helpers ---
