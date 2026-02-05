@@ -1,0 +1,35 @@
+# Docker
+.git
+.gitignore
+*.md
+LICENSE
+
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+testdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+data/
+*.db
+*.log
+
+# Temporary
+tmp/
+temp/

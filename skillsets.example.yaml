@@ -1,0 +1,119 @@
+# Aseity Skillsets Configuration
+# Location: ~/.aseity/skillsets.yaml
+
+# Global Settings
+settings:
+  default_validation_level: medium  # none, light, medium, strict
+  enable_auto_correction: true
+  skillset_training_threshold: 0.70
+  enable_dynamic_skillsets: true  # Context-aware skillset selection
+
+# Custom Model Profiles
+# Add profiles for models not in the defaults
+models:
+  # Example: Add a custom model
+  # llama-3.1-70b:
+  #   tier: 2
+  #   prompt_strategy: react
+  #   validation_level: medium
+  #   max_tokens: 32768
+  #   supports_native_fc: false
+  #   skillsets:
+  #     tool_selection: 0.88
+  #     parameter_construction: 0.90
+  #     command_construction: 0.85
+  #     search_query_formulation: 0.86
+  #     content_parsing: 0.84
+  #     error_diagnosis: 0.78
+  #     sequential_planning: 0.82
+  #     state_tracking: 0.72
+  #     dependency_resolution: 0.74
+  #     output_interpretation: 0.84
+  #     context_awareness: 0.80
+  #     self_correction: 0.70
+
+# Override Existing Profiles
+# Customize default model profiles
+overrides:
+  # Example: Boost Qwen 7B's weak skillsets
+  # qwen2.5:7b:
+  #   skillsets:
+  #     error_diagnosis: 0.75      # Up from 0.55
+  #     self_correction: 0.65      # Up from 0.45
+  #     state_tracking: 0.70       # Up from 0.50
+
+  # Example: Disable validation for GPT-4 (faster)
+  # gpt-4:
+  #   validation_level: none
+
+# Custom Skillsets
+# Define your own training prompts
+custom_skillsets:
+  # Example: Code Review Skillset
+  - name: code_review
+    description: Review code for bugs and improvements
+    enabled: true
+    training: |
+      ### Code Review
+      **Problem**: Missing bugs and code quality issues
+      **Solution**: Systematic code analysis
+      
+      Check for:
+      - Off-by-one errors in loops
+      - Null/undefined pointer dereferences
+      - Resource leaks (files, connections)
+      - Race conditions
+      - Error handling gaps
+      
+      Example:
+      Code: `for i := 0; i < len(arr); i++`
+      Check: Is `i+1` used anywhere? Could overflow?
+      Check: Is `arr` nil-checked before loop?
+
+  # Example: Security Audit Skillset
+  - name: security_audit
+    description: Find security vulnerabilities
+    enabled: true
+    training: |
+      ### Security Audit
+      **Problem**: Missing security vulnerabilities
+      **Solution**: Check for common attack vectors
+      
+      Common Vulnerabilities:
+      - SQL Injection: User input in queries
+      - XSS: Unescaped HTML output
+      - CSRF: Missing tokens on state-changing operations
+      - Hardcoded Secrets: API keys, passwords in code
+      - Path Traversal: Unsanitized file paths
+      
+      Example:
+      Bad: `query = "SELECT * FROM users WHERE id=" + userId`
+      Good: `query = "SELECT * FROM users WHERE id=?" with params`
+
+  # Example: Performance Optimization Skillset
+  - name: performance_check
+    description: Identify performance bottlenecks
+    enabled: false  # Disabled by default
+    training: |
+      ### Performance Check
+      **Problem**: Slow code and inefficiencies
+      **Solution**: Identify common performance issues
+      
+      Look for:
+      - N+1 queries (database calls in loops)
+      - Unnecessary allocations
+      - Missing indexes
+      - Blocking I/O in hot paths
+      - Inefficient algorithms (O(n²) when O(n) possible)
+      
+      Example:
+      Bad: `for user in users: db.query("SELECT * FROM posts WHERE user_id=?")`
+      Good: `db.query("SELECT * FROM posts WHERE user_id IN (?)", user_ids)`
+
+# Template Library (Coming Soon)
+# Pre-made skillsets you can enable
+# templates:
+#   - test_generation
+#   - documentation_writer
+#   - refactoring_assistant
+#   - deployment_helper

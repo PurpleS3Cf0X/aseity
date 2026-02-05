@@ -48,38 +48,67 @@ type Agent struct {
 	prov      provider.Provider
 	tools     *tools.Registry
 	conv      *Conversation
-	ConfirmCh chan bool   // TUI sends true/false here
-	InputCh   chan string // TUI sends user input here
-	depth     int         // sub-agent nesting depth
+	ConfirmCh chan bool     // TUI sends true/false here
+	InputCh   chan string   // TUI sends user input here
+	RequestCh chan struct{} // Channel to signal a request for user input/confirmation
+	depth     int           // sub-agent nesting depth
 
 	QualityGateEnabled bool   // Enforce strict judge check before completion
 	OriginalGoal       string // Track the initial user request for judging
 
 	// Skillset framework
-	profile skillsets.ModelProfile // Model capabilities and configuration
+	profile    skillsets.ModelProfile // Model capabilities and configuration
+	userConfig *skillsets.UserConfig  // User-defined skillsets and configurations
 }
 
 func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) *Agent {
+	// Load user configuration
+	userConfig, err := skillsets.LoadUserConfig()
+	if err != nil {
+		// Log error but continue with defaults
+		fmt.Printf("Warning: Failed to load user config: %v\n", err)
+		userConfig = &skillsets.UserConfig{}
+		*userConfig = skillsets.DefaultUserConfig()
+	}
+
 	// Detect model capabilities
 	modelName := prov.ModelName()
-	profile := skillsets.DetectModelProfile(modelName)
+	defaultProfiles := skillsets.DefaultProfiles()
+	mergedProfiles := skillsets.MergeProfiles(defaultProfiles, userConfig)
 
-	// Build and enhance system prompt
+	var profile skillsets.ModelProfile
+	if p, ok := mergedProfiles[modelName]; ok {
+		profile = p
+	} else {
+		// Fallback to detection
+		profile = skillsets.DetectModelProfile(modelName)
+	}
+
 	conv := NewConversation()
 	if systemPrompt == "" {
 		systemPrompt = BuildSystemPrompt()
 	}
-	// Inject skillset training based on model profile
+
+	// Inject base skillsets into system prompt
 	systemPrompt = skillsets.InjectSkillsets(systemPrompt, profile)
+
+	// Add custom skillsets
+	customSkillsets := skillsets.GetEnabledCustomSkillsets(userConfig)
+	for _, custom := range customSkillsets {
+		systemPrompt += "\n\n" + custom.Training
+	}
+
 	conv.AddSystem(systemPrompt)
 
 	return &Agent{
-		prov:      prov,
-		tools:     registry,
-		conv:      conv,
-		ConfirmCh: make(chan bool, 1),
-		InputCh:   make(chan string, 1),
-		profile:   profile,
+		prov:       prov,
+		tools:      registry,
+		conv:       conv,
+		ConfirmCh:  make(chan bool),
+		InputCh:    make(chan string),
+		RequestCh:  make(chan struct{}),
+		profile:    profile,
+		userConfig: userConfig,
 	}
 }
 
@@ -101,8 +130,10 @@ func NewWithDepth(prov provider.Provider, registry *tools.Registry, depth int, s
 	return a
 }
 
-func (a *Agent) Conversation() *Conversation { return a.conv }
-func (a *Agent) Depth() int                  { return a.depth }
+func (a *Agent) Conversation() *Conversation          { return a.conv }
+func (a *Agent) Depth() int                           { return a.depth }
+func (a *Agent) GetProfile() skillsets.ModelProfile   { return a.profile }
+func (a *Agent) GetUserConfig() *skillsets.UserConfig { return a.userConfig }
 
 func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 	// Enforce buffering requirement for parallel execution safety
@@ -122,6 +153,24 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 	if a.OriginalGoal == "" {
 		a.OriginalGoal = userMsg
 	}
+	// Dynamic skillset injection (if enabled)
+	if a.userConfig != nil && a.userConfig.Settings.EnableDynamicSkillsets {
+		intent := skillsets.DetectIntent(userMsg)
+		contextPrompt := skillsets.BuildContextualPrompt(intent, a.profile)
+
+		// Add context-specific training as a system message
+		if contextPrompt != "" {
+			a.conv.AddSystem(contextPrompt)
+
+			// Log intent detection for debugging
+			events <- Event{
+				Type: EventThinking,
+				Text: fmt.Sprintf("🎯 Detected intent: %s", skillsets.IntentName(intent)),
+			}
+		}
+	}
+
+	// Add user message to conversation
 	a.conv.AddUser(userMsg)
 	a.runLoop(ctx, events)
 }

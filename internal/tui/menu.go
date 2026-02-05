@@ -38,6 +38,9 @@ func NewMenuModel() MenuModel {
 		item{title: "/compact", desc: "Summarize history to save tokens"},
 		item{title: "/clear", desc: "Clear conversation history"},
 		item{title: "/agents", desc: "Manage or switch agents"},
+		item{title: "/settings", desc: "Open settings menu"},
+		item{title: "/skillsets", desc: "View and manage skillsets"},
+		item{title: "/profile", desc: "Show current model profile"},
 		item{title: "/quit", desc: "Exit the application"},
 	}
 

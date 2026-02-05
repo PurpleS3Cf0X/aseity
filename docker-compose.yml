@@ -9,6 +9,7 @@ services:
     environment:
       - ASEITY_PROVIDER=ollama
       - ASEITY_BASE_URL=http://ollama:11434/v1
+      - CRAWL4AI_URL=http://crawl4ai:11235
     depends_on:
       ollama:
         condition: service_healthy
@@ -22,7 +23,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: [ "CMD", "curl", "-f", "http://localhost:11434/api/tags" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -36,14 +37,82 @@ services:
     networks:
       - aseity-net
 
+  # Crawl4AI web scraping service (optional)
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: crawl4ai
+    ports:
+      - "11235:11235"
+    environment:
+      # Browser pool configuration
+      - BROWSER_POOL_SIZE=2 # Reduced for memory efficiency
+      - MAX_CONCURRENT_REQUESTS=5
+      - ENABLE_MONITORING=true
+      - LOG_LEVEL=info
+
+      # Memory optimization settings
+      - BROWSER_MEMORY_LIMIT=512m
+      - ENABLE_AUTO_CLEANUP=true
+      - CLEANUP_INTERVAL=300 # 5 minutes
+      - MAX_CACHE_SIZE=500m
+      - ENABLE_COMPRESSION=true
+
+      # Performance tuning
+      - BROWSER_TIMEOUT=30
+      - REQUEST_TIMEOUT=60
+      - ENABLE_LAZY_LOADING=true
+      - DISABLE_IMAGES_ON_LOW_MEM=true
+
+    # Shared memory for browser (required for Chromium)
+    shm_size: 512m
+
+    volumes:
+      - crawl4ai_cache:/app/cache
+
+    networks:
+      - aseity-net
+
+    # Health check
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:11235/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+    # Memory limits and cleanup
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g
+        reservations:
+          cpus: '1.0'
+          memory: 1g
+
+    # Logging limits (prevent log bloat)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Tmpfs for temporary files (RAM-based, auto-cleanup)
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+
+    # Optional: only start if explicitly enabled
+    profiles:
+      - crawl4ai
+
   vllm:
     image: vllm/vllm-openai:latest
     ports:
       - "8000:8000"
     command: >
-      --model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
-      --dtype auto
-      --max-model-len 8192
+      --model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B --dtype auto --max-model-len 8192
     profiles:
       - vllm
     deploy:
@@ -58,6 +127,8 @@ services:
 
 volumes:
   ollama_data:
+  crawl4ai_cache:
+
 
 networks:
   aseity-net:
