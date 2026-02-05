@@ -640,25 +640,33 @@ func cmdUpdate() {
 		fatal("Failed to resolve symlinks: %v", err)
 	}
 
-	exeDir := filepath.Dir(exePath)
+	findGitRoot := func(startDir string) string {
+		dir := startDir
+		for {
+			if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+				return dir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+		return ""
+	}
 
-	// Try to find .git directory by walking up
-	gitRoot := ""
-	currentDir := exeDir
-	for {
-		if _, err := os.Stat(filepath.Join(currentDir, ".git")); err == nil {
-			gitRoot = currentDir
-			break
+	// Try to find .git directory by walking up from executable
+	gitRoot := findGitRoot(filepath.Dir(exePath))
+
+	// If not found, try current working directory
+	if gitRoot == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			gitRoot = findGitRoot(cwd)
 		}
-		parent := filepath.Dir(currentDir)
-		if parent == currentDir {
-			break
-		}
-		currentDir = parent
 	}
 
 	if gitRoot == "" {
-		fatal("Could not locate .git directory from %s\nCannot update installed binary without git repository.", exePath)
+		fatal("Could not locate .git directory from %s or current directory.\nCannot update installed binary without git repository.", exePath)
 	}
 
 	// Change to git root
@@ -698,33 +706,31 @@ func cmdUpdate() {
 	}
 
 	// Rebuild binary
-	fmt.Println("🔨 Rebuilding binary...")
-	// Note: We are now at the root of the repo, so ./cmd/aseity should work
-	// But we need to make sure we output to the same location as the current binary if possible
-	// Or just default to bin/aseity as before?
-	// The user runs ./bin/aseity. If we are in root, outputting to bin/aseity is correct.
-	// If the binary is elsewhere, we might want to overwrite IT.
-	// But to be safe and consistent with previous behavior, let's keep bin/aseity logic
-	// expecting standard compilation.
-	// However, if the user moved the binary, this might rebuild it in the repo bin/ folder,
-	// not updating the one they ran.
-	// Improving logic: Update the RUNNING binary location if it is writable.
-	// Actually, Go cannot overwrite running binary on some OSs (Windows), but on Mac/Linux it usually works (unlink).
-	// Let's stick to the project structure: output to bin/aseity in the repo.
+	fmt.Printf("🔨 Rebuilding binary to %s...\n", exePath)
 
-	cmd = exec.Command("go", "build", "-v", "-o", "bin/aseity", "./cmd/aseity")
+	// We build directly to the executable path to update the installed version
+	cmd = exec.Command("go", "build", "-v", "-o", exePath, "./cmd/aseity")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fatal("Failed to rebuild binary: %v", err)
+		// If that fails (e.g. permissions), fall back to local bin
+		fmt.Printf("⚠️  Failed to overwrite %s: %v\n", exePath, err)
+		fallbackPath := filepath.Join(gitRoot, "bin", "aseity")
+		fmt.Printf("🔨 Trying fallback build to %s...\n", fallbackPath)
+		cmd = exec.Command("go", "build", "-v", "-o", fallbackPath, "./cmd/aseity")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fatal("Failed to rebuild binary: %v", err)
+		}
+		exePath = fallbackPath
 	}
 
 	// Get new version
-	newBinPath := filepath.Join(gitRoot, "bin", "aseity")
-	cmd = exec.Command(newBinPath, "--version")
+	cmd = exec.Command(exePath, "--version")
 	output, err = cmd.Output()
 	if err != nil {
-		fmt.Printf("⚠️  Build succeeded but could not run new binary at %s: %v\n", newBinPath, err)
+		fmt.Printf("⚠️  Build succeeded but could not run new binary at %s: %v\n", exePath, err)
 	} else {
 		fmt.Println("✅ Update complete!")
 		fmt.Printf("New version: %s", string(output))
