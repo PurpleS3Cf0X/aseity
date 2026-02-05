@@ -1,22 +1,63 @@
+# Binaries
 bin/
 /aseity
 /main
 *.exe
+*.dll
+*.so
+*.dylib
+
+# Environment & Secrets
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.yaml
+config.local.*
+settings.local.*
+
+# Logs
 *.log
+logs/
 
 # Mac
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.sublime-*
+
+# IDE
 .claude/
 
 # Testing
 coverage.out
 coverage.html
+*.test
+test-results/
 
-# Temp
+# Temp & Build
 tmp/
 temp/
+*.bak
+*.tmp
+*.cache
+dist/
+build/
+
+# Dependencies
+vendor/
+node_modules/
+
+# OS
+Thumbs.db
+Desktop.ini
