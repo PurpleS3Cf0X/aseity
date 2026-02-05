@@ -1086,22 +1086,15 @@ func (m Model) View() string {
 		lipgloss.NewStyle().Foreground(DimGreen).Render("Ctrl+C to quit"),
 	)
 
-	// Layout: Logo on Left, Status on Right, separated by a pipe??
-	// Or just side by side with spacing.
-	// The animated banner is wide (~40 chars).
-
-	headerInner := lipgloss.JoinHorizontal(lipgloss.Center,
+	// Layout: Logo on Left, Status on Right
+	// Use Top alignment for horizontal join to keep them at same baseline
+	headerInner := lipgloss.JoinHorizontal(lipgloss.Top,
 		lipgloss.NewStyle().PaddingLeft(2).Render(leftContent),
-		lipgloss.NewStyle().PaddingRight(2).PaddingTop(2).Render(rightContent), // Status
+		lipgloss.NewStyle().Width(6).Render(""), // Spacer
+		lipgloss.NewStyle().PaddingRight(2).Render(rightContent),
 	)
 
-	// Remove the border box (LogoBoxStyle) to fix "boundary too long"
-	// Just render the inner content centered or left-aligned?
-	// User complaint "boundary is too long" -> Border.
-
-	// We'll use a subtle bottom border for the whole header separation if needed, or just space.
-	// Actually, let's keep it minimal.
-	// Just center the whole header block.
+	// Center the entire header block horizontally
 	header := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(DimGreen).

@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.9.0] - 2026-02-05
+
+### Changed
+- **TUI Banner**: Restored Unicode block character banner per user preference (bold, blocky style)
+- **Header Layout**: Fixed centering issues - banner now properly centers in terminal and doesn't get pushed up
+
+### Fixed
+- Header alignment changed from vertical center to top alignment for proper display
+- Added spacer between logo and status for better visual separation
+
+---
+
 ## [2.8.4] - 2026-02-05
 
 ### Fixed
