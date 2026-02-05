@@ -134,20 +134,21 @@ const (
 )
 
 type Model struct {
-	width, height int
-	headerHeight  int // Actual rendered header height (measured dynamically)
-	viewport      viewport.Model
-	textarea      textarea.Model
-	spinner       spinner.Model
-	spinnerState  SpinnerState
-	messages      []chatMessage
-	thinking      bool
-	showThinking  bool
-	confirming    bool // waiting for user to approve/deny
-	confirmEvt    *agent.Event
-	providerName  string
-	modelName     string
-	currentTool   string // track which tool is running for animation
+	width, height  int
+	headerHeight   int // Actual rendered header height (measured dynamically)
+	viewport       viewport.Model
+	textarea       textarea.Model
+	spinner        spinner.Model
+	spinnerState   SpinnerState
+	messages       []chatMessage
+	thinking       bool
+	showThinking   bool
+	confirming     bool // waiting for user to approve/deny
+	confirmEvt     *agent.Event
+	providerName   string
+	modelName      string
+	providerOnline bool   // Track if provider is connected
+	currentTool    string // track which tool is running for animation
 
 	agent                  *agent.Agent
 	prov                   provider.Provider
@@ -194,14 +195,15 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	)
 
 	m := Model{
-		viewport:     vp,
-		textarea:     ta,
-		spinner:      sp,
-		showThinking: true,
-		providerName: provName,
-		modelName:    modelName,
-		prov:         prov,
-		toolReg:      toolReg,
+		viewport:       vp,
+		textarea:       ta,
+		spinner:        sp,
+		showThinking:   true,
+		providerName:   provName,
+		modelName:      modelName,
+		providerOnline: true, // Assume online initially
+		prov:           prov,
+		toolReg:        toolReg,
 
 		ctx:                    ctx,
 		cancel:                 cancel,
@@ -486,10 +488,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages[len(m.messages)-1].content += evt.Text
 
 		case agent.EventDelta:
+			// Provider is responding, so it's online
+			m.providerOnline = true
 			if len(m.messages) == 0 || m.messages[len(m.messages)-1].role != "assistant" {
-				m.messages = append(m.messages, chatMessage{role: "assistant"})
+				m.messages = append(m.messages, chatMessage{role: "assistant", content: evt.Text})
+			} else {
+				m.messages[len(m.messages)-1].content += evt.Text
 			}
-			m.messages[len(m.messages)-1].content += evt.Text
+			m.rebuildView()
 
 		case agent.EventToolCall:
 			m.currentTool = evt.ToolName
@@ -547,6 +553,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case agent.EventError:
 			m.messages = append(m.messages, chatMessage{role: "error", content: evt.Error})
 			m.thinking = false
+			// Check if it's a connection error
+			if strings.Contains(strings.ToLower(evt.Error), "connection") ||
+				strings.Contains(strings.ToLower(evt.Error), "dial") ||
+				strings.Contains(strings.ToLower(evt.Error), "refused") {
+				m.providerOnline = false
+			}
 			m.rebuildView()
 			return m, nil
 
@@ -1080,9 +1092,17 @@ func (m Model) View() string {
 	// We use m.frame to animate the gradient colors
 	logo := AnimatedBanner(m.frame)
 
+	// Connection status indicator
+	statusIndicator := "●"
+	statusColor := BrightGreen
+	if !m.providerOnline {
+		statusColor = lipgloss.Color("#FF5555") // Red
+	}
+	statusDot := lipgloss.NewStyle().Foreground(statusColor).Render(statusIndicator)
+
 	leftContent := lipgloss.JoinVertical(lipgloss.Center,
 		logo,
-		fmt.Sprintf("%s / %s", m.providerName, m.modelName),
+		fmt.Sprintf("%s %s / %s", statusDot, m.providerName, m.modelName),
 		// Add some breathing room
 	)
 

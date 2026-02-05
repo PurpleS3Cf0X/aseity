@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.11.0] - 2026-02-05
+
+### Added
+- **Provider Connection Status Indicator**: Shows real-time connection status next to provider name
+  - Green dot (●) when provider is online and responding
+  - Red dot (●) when provider is disconnected or connection errors occur
+  - Automatically updates based on response/error events
+  - Displayed in header: `● ollama / qwen2.5:14b`
+
+### Technical Details
+- Added `providerOnline` field to TUI Model struct
+- Status updates on `EventDelta` (online) and `EventError` (offline for connection errors)
+- Visual indicator uses BrightGreen for online, #FF5555 (red) for offline
+
+---
+
 ## [2.10.1] - 2026-02-05
 
 ### Fixed
