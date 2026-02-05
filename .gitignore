@@ -61,3 +61,12 @@ node_modules/
 # OS
 Thumbs.db
 Desktop.ini
+
+# Design Documentation (Internal Only)
+docs/LOGIC_FLOWS.md
+docs/*_FLOWS.md
+docs/design/
+docs/architecture/
+**/design_*.md
+**/logic_*.md
+**/architecture_*.md
