@@ -1125,11 +1125,12 @@ func (m Model) View() string {
 		rightContent,
 	)
 
-	// Render header with bottom border
+	// Render header with bottom border and top padding to lower the logo
 	header := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(DimGreen).
 		Width(m.width).
+		PaddingTop(2). // Add top padding to lower the logo
 		Render(headerInner)
 
 	// CRITICAL: Store the actual header height for viewport calculations

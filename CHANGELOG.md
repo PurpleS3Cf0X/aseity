@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.1] - 2026-02-05
+
+### Fixed
+- **Logo Positioning**: Added top padding to header to lower logo position on screen for better vertical centering
+
+---
+
 ## [2.10.0] - 2026-02-05
 
 ### Added
