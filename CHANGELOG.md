@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.11.5] - 2026-02-05
+
+### Changed
+- **Token Usage Format**: Simplified to plain text without markdown formatting
+  - Removed italic markdown formatting that may have caused rendering issues
+  - Format: `Tokens: ~X → ~Y (~Z total, estimated)`
+  - Should now display correctly in all cases
+
+---
+
 ## [2.11.4] - 2026-02-05
 
 ### Fixed

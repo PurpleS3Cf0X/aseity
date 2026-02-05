@@ -564,55 +564,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case agent.EventDone:
 			m.thinking = false
-			// Display token usage if available, or estimate if not
+
+			// Calculate and append token usage to the last assistant message
+			var usageText string
 			if evt.Usage != nil {
-				usageText := fmt.Sprintf("\n\n%s",
-					lipgloss.NewStyle().
-						Foreground(DimGreen).
-						Render(fmt.Sprintf("Tokens: %d → %d (%d total)",
-							evt.Usage.InputTokens,
-							evt.Usage.OutputTokens,
-							evt.Usage.TotalTokens)))
-				m.viewport.SetContent(m.viewport.View() + usageText)
-			} else {
-				// Fallback: Estimate tokens client-side for providers that don't return usage
-				// This is approximate: ~1.3 tokens per word on average
-				if len(m.messages) >= 2 {
-					lastUserMsg := ""
-					lastAssistantMsg := ""
+				// Use actual usage from provider
+				usageText = fmt.Sprintf("\n\nTokens: %d → %d (%d total)",
+					evt.Usage.InputTokens,
+					evt.Usage.OutputTokens,
+					evt.Usage.TotalTokens)
+			} else if len(m.messages) >= 2 {
+				// Fallback: Estimate tokens client-side
+				lastUserMsg := ""
+				lastAssistantMsg := ""
 
-					// Find last user and assistant messages
-					for i := len(m.messages) - 1; i >= 0; i-- {
-						if m.messages[i].role == "assistant" && lastAssistantMsg == "" {
-							lastAssistantMsg = m.messages[i].content
-						}
-						if m.messages[i].role == "user" && lastUserMsg == "" {
-							lastUserMsg = m.messages[i].content
-						}
-						if lastUserMsg != "" && lastAssistantMsg != "" {
-							break
-						}
+				// Find last user and assistant messages
+				for i := len(m.messages) - 1; i >= 0; i-- {
+					if m.messages[i].role == "assistant" && lastAssistantMsg == "" {
+						lastAssistantMsg = m.messages[i].content
 					}
-
+					if m.messages[i].role == "user" && lastUserMsg == "" {
+						lastUserMsg = m.messages[i].content
+					}
 					if lastUserMsg != "" && lastAssistantMsg != "" {
-						// Rough estimation: count words and multiply by 1.3
-						inputWords := len(strings.Fields(lastUserMsg))
-						outputWords := len(strings.Fields(lastAssistantMsg))
-						inputTokens := int(float64(inputWords) * 1.3)
-						outputTokens := int(float64(outputWords) * 1.3)
-						totalTokens := inputTokens + outputTokens
+						break
+					}
+				}
 
-						usageText := fmt.Sprintf("\n\n%s",
-							lipgloss.NewStyle().
-								Foreground(DimGreen).
-								Render(fmt.Sprintf("Tokens: ~%d → ~%d (~%d total, estimated)",
-									inputTokens,
-									outputTokens,
-									totalTokens)))
-						m.viewport.SetContent(m.viewport.View() + usageText)
+				if lastUserMsg != "" && lastAssistantMsg != "" {
+					// Rough estimation: ~1.3 tokens per word
+					inputWords := len(strings.Fields(lastUserMsg))
+					outputWords := len(strings.Fields(lastAssistantMsg))
+					inputTokens := int(float64(inputWords) * 1.3)
+					outputTokens := int(float64(outputWords) * 1.3)
+					totalTokens := inputTokens + outputTokens
+
+					usageText = fmt.Sprintf("\n\nTokens: ~%d → ~%d (~%d total, estimated)",
+						inputTokens,
+						outputTokens,
+						totalTokens)
+				}
+			}
+
+			// Append usage to the last assistant message content
+			if usageText != "" && len(m.messages) > 0 {
+				for i := len(m.messages) - 1; i >= 0; i-- {
+					if m.messages[i].role == "assistant" {
+						m.messages[i].content += usageText
+						break
 					}
 				}
 			}
+
 			m.rebuildView()
 			return m, nil
 		}
