@@ -1238,13 +1238,12 @@ func (m Model) View() string {
 		}
 		m.viewport.Height = newHeight
 
-		// CRITICAL: Since View operates on a copy, and we just shrank the viewport (likely),
-		// we must re-clamp the YOffset to ensure we stick to the bottom if we were at the bottom.
-		// Since we usually want to be at bottom for chat, let's force it for this frame.
-		// ONLY if height is valid to avoid panic
-		if m.viewport.Height > 0 {
-			m.viewport.GotoBottom()
-		}
+		// NOTE: We do NOT call m.viewport.GotoBottom() here anymore.
+		// Since View() is called on a value receiver, this change doesn't persist,
+		// but it repeats every frame if header height mismatches.
+		// Calling GotoBottom() here forces the view to the bottom every frame,
+		// making it impossible for the user to scroll up.
+		// We trust Update() to handle the initial scroll-to-bottom.
 	}
 
 	// --- Input Area (Enhanced Box) ---

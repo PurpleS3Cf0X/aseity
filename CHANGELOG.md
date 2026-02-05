@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.3] - 2026-02-05
+
+### Fixed
+- **Scroll Lock**: Fixed an issue where the view would forcibly scroll to the bottom, preventing manual scrolling up
+
+---
+
 ## [2.15.2] - 2026-02-05
 
 ### Fixed
