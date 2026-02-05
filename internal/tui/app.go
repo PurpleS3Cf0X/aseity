@@ -1080,7 +1080,7 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 			body,
 		),
 	)
-	
+
 	// If we extracted token usage, display it below the box with custom styling
 	if usageLine != "" {
 		tokenStyle := lipgloss.NewStyle().
@@ -1089,9 +1089,8 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 			PaddingLeft(2)
 		result += "\n" + tokenStyle.Render(usageLine)
 	}
-	
-	return result
-} + "\n"
+
+	return result + "\n"
 }
 
 func (m *Model) renderThinkingBlock(content string) string {
