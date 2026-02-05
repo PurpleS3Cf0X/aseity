@@ -568,8 +568,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Calculate and append token usage to the last assistant message
 			var usageText string
 			if evt.Usage != nil {
-				// Use actual usage from provider
-				usageText = fmt.Sprintf("\n\nTokens: %d → %d (%d total)",
+				// Use actual from provider
+				usageText = fmt.Sprintf("\n\nTokens: in %d · out %d · total %d",
 					evt.Usage.InputTokens,
 					evt.Usage.OutputTokens,
 					evt.Usage.TotalTokens)
@@ -599,7 +599,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					outputTokens := int(float64(outputWords) * 1.3)
 					totalTokens := inputTokens + outputTokens
 
-					usageText = fmt.Sprintf("\n\nTokens: ~%d → ~%d (~%d total, estimated)",
+					usageText = fmt.Sprintf("\n\nTokens: in ~%d · out ~%d · total ~%d (est.)",
 						inputTokens,
 						outputTokens,
 						totalTokens)
@@ -1084,7 +1084,7 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 	// If we extracted token usage, display it below the box with custom styling
 	if usageLine != "" {
 		tokenStyle := lipgloss.NewStyle().
-			Foreground(DimGreen).
+			Foreground(lipgloss.Color("#FFD700")). // Soft gold/yellow
 			Italic(true).
 			PaddingLeft(2)
 		result += "\n" + tokenStyle.Render(usageLine)

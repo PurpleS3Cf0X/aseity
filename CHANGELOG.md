@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.14.0] - 2026-02-05
+
+### Changed
+- **Token Display Format**: Updated to labeled format with yellow color
+  - New format: `Tokens: in ~X · out ~Y · total ~Z (est.)`
+  - Changed color from dim green to soft gold (#FFD700)
+  - Clearer labels for input, output, and total tokens
+  - Uses middle dot (·) separators for better readability
+
+---
+
 ## [2.13.0] - 2026-02-05
 
 ### Added
