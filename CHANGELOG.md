@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.16.0] - 2026-02-05
+
+### Added
+- **PDF Support**: `read` tool now natively extracts text from PDF files
+- **Excel Support**: `read` tool now converts Excel (.xlsx) sheets to Markdown tables for properly structured viewing
+
+---
+
 ## [2.15.3] - 2026-02-05
 
 ### Fixed

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,7 +21,7 @@ type fileReadArgs struct {
 
 func (f *FileReadTool) Name() string { return "file_read" }
 func (f *FileReadTool) Description() string {
-	return "Read the contents of a file. Returns numbered lines. Files larger than 10MB will be rejected."
+	return "Read the contents of a file. Supports Text, PDF, and Excel (.xlsx). Returns numbered lines for text/PDF, and Markdown tables for Excel."
 }
 func (f *FileReadTool) NeedsConfirmation() bool { return false }
 
@@ -54,11 +55,30 @@ func (f *FileReadTool) Execute(_ context.Context, rawArgs string) (Result, error
 		return Result{Error: fmt.Sprintf("file is too large (%d bytes, max %d). Use offset/limit to read a portion.", info.Size(), maxFileReadSize)}, nil
 	}
 
-	data, err := os.ReadFile(args.Path)
-	if err != nil {
-		return Result{Error: err.Error()}, nil
+	// Check file extension for specialized parsing
+	ext := strings.ToLower(filepath.Ext(args.Path))
+	var content string
+	var parseErr error
+
+	switch ext {
+	case ".pdf":
+		content, parseErr = parsePDF(args.Path)
+	case ".xlsx", ".xlsm":
+		content, parseErr = parseExcel(args.Path)
+	default:
+		// Default text reading
+		data, err := os.ReadFile(args.Path)
+		if err != nil {
+			return Result{Error: err.Error()}, nil
+		}
+		content = string(data)
 	}
-	lines := strings.Split(string(data), "\n")
+
+	if parseErr != nil {
+		return Result{Error: fmt.Sprintf("failed to parse %s: %v", ext, parseErr)}, nil
+	}
+
+	lines := strings.Split(content, "\n")
 	start := args.Offset
 	if start > len(lines) {
 		start = len(lines)
@@ -76,13 +96,33 @@ func (f *FileReadTool) Execute(_ context.Context, rawArgs string) (Result, error
 	}
 
 	var sb strings.Builder
+	// Add header for context
+	if ext == ".pdf" || ext == ".xlsx" || ext == ".xlsm" {
+		fmt.Fprintf(&sb, "[Reading %s as %s]\n", filepath.Base(args.Path), ext)
+	}
+
 	for i := start; i < end; i++ {
 		line := lines[i]
-		// Truncate very long lines
-		if len(line) > 2000 {
-			line = line[:2000] + "... [line truncated]"
+		// Truncate very long lines (unless it's a table row which might be long but structure matters)
+		// For tables, 2000 chars is plenty, but let's be safe.
+		if len(line) > 4000 {
+			line = line[:4000] + "... [line truncated]"
 		}
-		fmt.Fprintf(&sb, "%4d\t%s\n", i+1, line)
+		// Special formatting for different types?
+		// Text file: Numbered lines are good for editing.
+		// PDF/Excel: Numbered lines might distract from the "clean view" user asked for.
+		// Let's keep line numbers for consistency and referencing, but maybe make them subtle?
+		// User asked for "proper to the view".
+		// For Markdown tables (Excel), line numbers break the copy-paste ability of the table.
+		// If it's Excel/PDF, maybe we skip line numbers or output them differently.
+
+		if ext == ".xlsx" || ext == ".xlsm" {
+			// For Excel tables, just output the line raw to preserve markdown structure
+			fmt.Fprintf(&sb, "%s\n", line)
+		} else {
+			// For text/code/PDF, numbered lines are useful for "read lines 10-20"
+			fmt.Fprintf(&sb, "%4d\t%s\n", i+1, line)
+		}
 	}
 
 	if end < len(lines) {
