@@ -267,7 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If headerHeight hasn't been set yet (first render), use a reasonable default
 		headerH := m.headerHeight
 		if headerH == 0 {
-			headerH = 10 // Initial estimate, will be corrected after first View()
+			headerH = 16 // Increase initial estimate to conservative value (was 10) to prevent bottom cutoff
 		}
 		inputH := 3 // Minimal input
 		menuH := 0
@@ -1086,7 +1086,7 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 		tokenStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFD700")). // Soft gold/yellow
 			Italic(true).
-			PaddingLeft(2)
+			PaddingLeft(4) // Increased padding for better alignment with text
 		result += "\n" + tokenStyle.Render(usageLine)
 	}
 
@@ -1233,6 +1233,10 @@ func (m Model) View() string {
 			menuH = 16
 		}
 		m.viewport.Height = m.height - m.headerHeight - inputH - menuH
+		// CRITICAL: Since View operates on a copy, and we just shrank the viewport (likely),
+		// we must re-clamp the YOffset to ensure we stick to the bottom if we were at the bottom.
+		// Since we usually want to be at bottom for chat, let's force it for this frame.
+		m.viewport.GotoBottom()
 	}
 
 	// --- Input Area (Enhanced Box) ---

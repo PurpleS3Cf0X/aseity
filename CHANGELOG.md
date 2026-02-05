@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.15.1] - 2026-02-05
+
+### Fixed
+- **TUI Auto-Scroll**: Fixed issue where the bottom of the response (e.g., token usage) was sometimes cut off or not scrolled into view
+- **Alignment**: Tweaked token usage display alignment for better visual consistency
+
+---
+
 ## [2.15.0] - 2026-02-05
 
 ### Improved
