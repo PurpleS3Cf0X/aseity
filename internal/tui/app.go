@@ -552,6 +552,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case agent.EventDone:
 			m.thinking = false
+			// Display token usage if available
+			if evt.Usage != nil {
+				usageText := fmt.Sprintf("\n\n%s",
+					lipgloss.NewStyle().
+						Foreground(DimGreen).
+						Render(fmt.Sprintf("Tokens: %d → %d (%d total)",
+							evt.Usage.InputTokens,
+							evt.Usage.OutputTokens,
+							evt.Usage.TotalTokens)))
+				m.viewport.SetContent(m.viewport.View() + usageText)
+			}
 			m.rebuildView()
 			return m, nil
 		}

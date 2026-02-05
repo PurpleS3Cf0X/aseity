@@ -26,6 +26,7 @@ type Event struct {
 	Result   string
 	Error    string
 	Done     bool
+	Usage    *provider.Usage // Token usage for the response
 }
 
 type EventType int
@@ -222,6 +223,7 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 
 		var textBuf strings.Builder
 		var toolCalls []provider.ToolCall
+		var usage *provider.Usage // Capture usage from final chunk
 
 		for chunk := range stream {
 
@@ -238,6 +240,7 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 			}
 			if chunk.Done {
 				toolCalls = chunk.ToolCalls
+				usage = chunk.Usage // Capture usage from final chunk
 			}
 		}
 
@@ -339,7 +342,7 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 				}
 			}
 
-			events <- Event{Type: EventDone, Done: true}
+			events <- Event{Type: EventDone, Done: true, Usage: usage}
 			return
 		}
 

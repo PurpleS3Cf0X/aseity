@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.10.0] - 2026-02-05
+
+### Added
+- **Token Usage Display**: Shows token consumption after each response, similar to Claude Code
+  - Format: `Tokens: 150 → 420 (570 total)` displayed in DimGreen
+  - Captures input tokens, output tokens, and total from provider API
+  - Currently supported: OpenAI-compatible providers (qwen2.5:14b via Ollama)
+
+### Technical Details
+- Added `Usage` struct to `provider.StreamChunk` with InputTokens/OutputTokens/TotalTokens
+- Updated OpenAI provider to capture usage from API response
+- Modified agent to propagate usage through Event system
+- TUI displays usage after EventDone when available
+
+---
+
 ## [2.9.2] - 2026-02-05
 
 ### Fixed

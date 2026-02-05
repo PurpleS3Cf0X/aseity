@@ -30,12 +30,20 @@ type ToolDef struct {
 	Parameters  any    `json:"parameters"`
 }
 
+// Usage tracks token consumption for a request
+type Usage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	TotalTokens  int `json:"total_tokens"`
+}
+
 type StreamChunk struct {
 	Delta     string
 	Thinking  string // Model's internal reasoning/chain-of-thought
 	ToolCalls []ToolCall
 	Done      bool
 	Error     error
+	Usage     *Usage // Token usage (populated in final chunk when Done=true)
 }
 
 type Provider interface {

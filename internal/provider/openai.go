@@ -106,6 +106,11 @@ type oaiStreamChunk struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 }
 
 func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolDef) (<-chan StreamChunk, error) {
@@ -175,6 +180,7 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 				for _, tc := range toolCalls {
 					tcs = append(tcs, *tc)
 				}
+				// Note: [DONE] marker doesn't include usage, it was in previous chunk
 				ch <- StreamChunk{Done: true, ToolCalls: tcs}
 				return
 			}
@@ -241,7 +247,16 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 				for _, tc := range toolCalls {
 					tcs = append(tcs, *tc)
 				}
-				ch <- StreamChunk{Done: true, ToolCalls: tcs}
+				// Populate usage if available
+				var usage *Usage
+				if chunk.Usage != nil {
+					usage = &Usage{
+						InputTokens:  chunk.Usage.PromptTokens,
+						OutputTokens: chunk.Usage.CompletionTokens,
+						TotalTokens:  chunk.Usage.TotalTokens,
+					}
+				}
+				ch <- StreamChunk{Done: true, ToolCalls: tcs, Usage: usage}
 				return
 			}
 		}
