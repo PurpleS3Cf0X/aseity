@@ -27,6 +27,7 @@ func (m *MockProviderFallback) Chat(ctx context.Context, msgs []provider.Message
 	return ch, nil
 }
 func (m *MockProviderFallback) Name() string { return "mock-fallback" }
+func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderFallback) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil
 }

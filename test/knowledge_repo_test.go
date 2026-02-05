@@ -40,6 +40,7 @@ func (m *MockProviderKnowledge) Chat(ctx context.Context, msgs []provider.Messag
 	return ch, nil
 }
 func (m *MockProviderKnowledge) Name() string { return "mock-knowledge" }
+func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderKnowledge) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil
 }

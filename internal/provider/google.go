@@ -26,6 +26,8 @@ func NewGoogle(apiKey, model string) *GoogleProvider {
 
 func (g *GoogleProvider) Name() string { return "google" }
 
+func (g *GoogleProvider) ModelName() string { return g.model }
+
 func (g *GoogleProvider) Models(_ context.Context) ([]string, error) {
 	return []string{"gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro"}, nil
 }

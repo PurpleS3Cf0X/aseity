@@ -24,6 +24,8 @@ func WithRetry(p Provider, maxRetries int) *RetryProvider {
 
 func (r *RetryProvider) Name() string { return r.inner.Name() }
 
+func (r *RetryProvider) ModelName() string { return r.inner.ModelName() }
+
 func (r *RetryProvider) Models(ctx context.Context) ([]string, error) {
 	var lastErr error
 	for attempt := 0; attempt <= r.maxRetries; attempt++ {

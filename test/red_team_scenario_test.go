@@ -47,6 +47,7 @@ func (m *MockProviderRedTeam) Chat(ctx context.Context, msgs []provider.Message,
 	return ch, nil
 }
 func (m *MockProviderRedTeam) Name() string { return "mock-redteam" }
+func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderRedTeam) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil
 }

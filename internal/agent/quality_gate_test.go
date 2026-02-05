@@ -31,6 +31,7 @@ func (m *MockProviderGate) Chat(ctx context.Context, msgs []provider.Message, to
 	return ch, nil
 }
 func (m *MockProviderGate) Name() string { return "mock" }
+func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderGate) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil
 }

@@ -41,5 +41,6 @@ type StreamChunk struct {
 type Provider interface {
 	Chat(ctx context.Context, msgs []Message, tools []ToolDef) (<-chan StreamChunk, error)
 	Name() string
+	ModelName() string // Returns the model name for capability detection
 	Models(ctx context.Context) ([]string, error)
 }

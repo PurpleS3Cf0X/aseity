@@ -31,6 +31,8 @@ func NewOpenAI(name, baseURL, apiKey, model string) *OpenAIProvider {
 
 func (o *OpenAIProvider) Name() string { return o.name }
 
+func (o *OpenAIProvider) ModelName() string { return o.model }
+
 func (o *OpenAIProvider) Models(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/models", nil)
 	if err != nil {

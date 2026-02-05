@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanpaul/aseity/internal/agent/skillsets"
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
 )
@@ -53,20 +54,32 @@ type Agent struct {
 
 	QualityGateEnabled bool   // Enforce strict judge check before completion
 	OriginalGoal       string // Track the initial user request for judging
+
+	// Skillset framework
+	profile skillsets.ModelProfile // Model capabilities and configuration
 }
 
 func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) *Agent {
+	// Detect model capabilities
+	modelName := prov.ModelName()
+	profile := skillsets.DetectModelProfile(modelName)
+
+	// Build and enhance system prompt
 	conv := NewConversation()
 	if systemPrompt == "" {
 		systemPrompt = BuildSystemPrompt()
 	}
+	// Inject skillset training based on model profile
+	systemPrompt = skillsets.InjectSkillsets(systemPrompt, profile)
 	conv.AddSystem(systemPrompt)
+
 	return &Agent{
 		prov:      prov,
 		tools:     registry,
 		conv:      conv,
 		ConfirmCh: make(chan bool, 1),
 		InputCh:   make(chan string, 1),
+		profile:   profile,
 	}
 }
 

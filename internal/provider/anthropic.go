@@ -26,6 +26,8 @@ func NewAnthropic(apiKey, model string) *AnthropicProvider {
 
 func (a *AnthropicProvider) Name() string { return "anthropic" }
 
+func (a *AnthropicProvider) ModelName() string { return a.model }
+
 func (a *AnthropicProvider) Models(_ context.Context) ([]string, error) {
 	return []string{
 		"claude-opus-4-20250514",
