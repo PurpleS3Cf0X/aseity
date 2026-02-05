@@ -592,6 +592,7 @@ func showHelp() {
   --provider <name>           Use specific provider (ollama, openai, anthropic, google)
   --model <name>              Use specific model
   --session <id|path>         Resume a previous session
+  --update                    Update to latest version from GitHub
   --version                   Show version
   --yes, -y                   Auto-approve all tool execution (dangerous)
   --help, -h                  Show this help
