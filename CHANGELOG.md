@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.11.3] - 2026-02-05
+
+### Fixed
+- **Viewport Auto-Scroll**: Responses now automatically scroll to bottom
+  - Fixes issue where responses were cut off at bottom of viewport
+  - Token usage line now always visible after responses
+  - Viewport automatically scrolls to show latest content
+
+---
+
 ## [2.11.2] - 2026-02-05
 
 ### Added
