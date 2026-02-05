@@ -246,6 +246,22 @@ var (
 	RoleHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
 			MarginBottom(1)
+
+	// --- New Layout Styles ---
+
+	// InputBoxStyle - Distinct box for user input
+	InputBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#00FF41")). // Matrix Green
+			Padding(0, 1).
+			Margin(0, 0)
+
+	// ViewportStyle - Border for the main content area
+	ViewportStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, true, false, true). // Vertical borders only? Or full box?
+		// Let's try a subtle border to separate it from edges
+		BorderForeground(lipgloss.Color("#1a1a2e")).
+		Padding(0, 1)
 )
 
 const Banner = `

@@ -266,9 +266,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.menu.active {
 			menuH = 16 // 14 for list + 2 for borders/padding
 		}
-		m.viewport.Width = msg.Width
+		m.viewport.Width = msg.Width - 4 // Account for border (2) and padding (2)
 		m.viewport.Height = msg.Height - headerH - inputH - menuH
-		m.textarea.SetWidth(msg.Width - 4)
+		m.textarea.SetWidth(msg.Width - 6) // Account for input box border/padding (4) + prompt (2)
 		m.rebuildView()
 
 	case tea.KeyMsg:
@@ -1110,7 +1110,7 @@ func (m Model) View() string {
 		Align(lipgloss.Center).
 		Render(headerInner)
 
-	// --- Input Area (Minimal) ---
+	// --- Input Area (Enhanced Box) ---
 	prompt := lipgloss.NewStyle().Foreground(Green).Bold(true).Render("> ")
 	if m.thinking {
 		prompt = lipgloss.NewStyle().Foreground(Purple).Bold(true).Render("● ")
@@ -1118,37 +1118,38 @@ func (m Model) View() string {
 		prompt = lipgloss.NewStyle().Foreground(Amber).Bold(true).Render("? ")
 	}
 
-	input := lipgloss.JoinHorizontal(lipgloss.Top,
+	// Render textarea view inside the box
+	inputContent := lipgloss.JoinHorizontal(lipgloss.Top,
 		prompt,
 		m.textarea.View(),
 	)
+
+	// Wrap in bordered box
+	// Calculate width to match header/viewport
+	inputBox := InputBoxStyle.
+		Width(m.width - 4). // Account for margins
+		Render(inputContent)
 
 	// --- Footer ---
 	keyStyle := lipgloss.NewStyle().Foreground(DimGreen)
 	help := keyStyle.Render("Enter: send  •  Alt+Enter: newline  •  /help  •  Esc: quit")
 
-	// Render content
-	// Overlay Menu if active
-	// Overlay Menu if active
-	if m.menu.active {
-		menuView := m.menu.View()
+	// --- Layout Assembly ---
+	// We use JoinVertical to stack everything
 
-		// Join vertical placing menu BELOW input
-		return lipgloss.JoinVertical(lipgloss.Left,
-			header,
-			m.viewport.View(),
-			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
-			menuView,
-			lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
-		)
-	}
-	// Menu inactive
-	return lipgloss.JoinVertical(lipgloss.Left,
+	mainView := lipgloss.JoinVertical(lipgloss.Left,
 		header,
-		m.viewport.View(),
-		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(0).Render(input),
-		lipgloss.NewStyle().PaddingTop(0).PaddingLeft(2).Render(help),
+		ViewportStyle.Render(m.viewport.View()), // Apply viewport border style
+		inputBox,
+		lipgloss.NewStyle().PaddingLeft(2).Render(help),
 	)
+
+	if m.menu.active {
+		// Overlay logic would go here, currently just appending
+		return lipgloss.JoinVertical(lipgloss.Left, mainView, m.menu.View())
+	}
+
+	return mainView
 }
 
 func truncate(s string, n int) string {
