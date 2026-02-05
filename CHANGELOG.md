@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.4] - 2026-02-05
+
+### Fixed
+- **TUI Banner Rendering**: Replaced Unicode block characters with pure ASCII art to ensure the banner displays correctly across all terminals, SSH connections, and font configurations. Fixes garbled/corrupted banner display.
+
+---
+
 ## [2.8.3] - 2026-02-05
 
 ### Fixed
