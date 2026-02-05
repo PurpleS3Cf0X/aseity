@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.15.0] - 2026-02-05
+
+### Improved
+- **Robust Self-Update**: The `--update` command now dynamically locates the git repository from the executable path
+  - Works correctly regardless of the current working directory
+  - Traverses directory tree to find `.git` root
+  - Resolves symlinks automatically
+
+---
+
 ## [2.14.0] - 2026-02-05
 
 ### Changed

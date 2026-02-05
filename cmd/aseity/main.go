@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -627,10 +628,44 @@ func showHelp() {
 func cmdUpdate() {
 	fmt.Println("🔄 Updating Aseity to latest version...")
 
-	// Check if we're in a git repository
-	if _, err := os.Stat(".git"); os.IsNotExist(err) {
-		fatal("Not in a git repository. Cannot update.")
+	// Find the executables directory
+	exePath, err := os.Executable()
+	if err != nil {
+		fatal("Failed to get executable path: %v", err)
 	}
+
+	// Resolve symlinks
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		fatal("Failed to resolve symlinks: %v", err)
+	}
+
+	exeDir := filepath.Dir(exePath)
+
+	// Try to find .git directory by walking up
+	gitRoot := ""
+	currentDir := exeDir
+	for {
+		if _, err := os.Stat(filepath.Join(currentDir, ".git")); err == nil {
+			gitRoot = currentDir
+			break
+		}
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			break
+		}
+		currentDir = parent
+	}
+
+	if gitRoot == "" {
+		fatal("Could not locate .git directory from %s\nCannot update installed binary without git repository.", exePath)
+	}
+
+	// Change to git root
+	if err := os.Chdir(gitRoot); err != nil {
+		fatal("Failed to change to git directory: %v", err)
+	}
+	fmt.Printf("📂 Found repository at: %s\n", gitRoot)
 
 	// Get current version
 	currentVersion := version.Version
@@ -664,6 +699,19 @@ func cmdUpdate() {
 
 	// Rebuild binary
 	fmt.Println("🔨 Rebuilding binary...")
+	// Note: We are now at the root of the repo, so ./cmd/aseity should work
+	// But we need to make sure we output to the same location as the current binary if possible
+	// Or just default to bin/aseity as before?
+	// The user runs ./bin/aseity. If we are in root, outputting to bin/aseity is correct.
+	// If the binary is elsewhere, we might want to overwrite IT.
+	// But to be safe and consistent with previous behavior, let's keep bin/aseity logic
+	// expecting standard compilation.
+	// However, if the user moved the binary, this might rebuild it in the repo bin/ folder,
+	// not updating the one they ran.
+	// Improving logic: Update the RUNNING binary location if it is writable.
+	// Actually, Go cannot overwrite running binary on some OSs (Windows), but on Mac/Linux it usually works (unlink).
+	// Let's stick to the project structure: output to bin/aseity in the repo.
+
 	cmd = exec.Command("go", "build", "-v", "-o", "bin/aseity", "./cmd/aseity")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -672,13 +720,14 @@ func cmdUpdate() {
 	}
 
 	// Get new version
-	cmd = exec.Command("./bin/aseity", "--version")
+	newBinPath := filepath.Join(gitRoot, "bin", "aseity")
+	cmd = exec.Command(newBinPath, "--version")
 	output, err = cmd.Output()
 	if err != nil {
-		fatal("Failed to get new version: %v", err)
+		fmt.Printf("⚠️  Build succeeded but could not run new binary at %s: %v\n", newBinPath, err)
+	} else {
+		fmt.Println("✅ Update complete!")
+		fmt.Printf("New version: %s", string(output))
 	}
-
-	fmt.Println("✅ Update complete!")
-	fmt.Printf("New version: %s", string(output))
 	fmt.Println("\nRestart Aseity to use the new version.")
 }
