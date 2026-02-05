@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -17,26 +18,31 @@ import (
 type WebCrawlTool struct{}
 
 type webCrawlArgs struct {
-	URL        string `json:"url"`
-	WaitFor    string `json:"wait_for,omitempty"`   // CSS selector to wait for
-	Screenshot bool   `json:"screenshot,omitempty"` // Take a screenshot?
+	URL        string   `json:"url,omitempty"`
+	URLs       []string `json:"urls,omitempty"` // Support for batch crawling
+	WaitFor    string   `json:"wait_for,omitempty"`
+	Screenshot bool     `json:"screenshot,omitempty"`
 }
 
 func (w *WebCrawlTool) Name() string            { return "web_crawl" }
 func (w *WebCrawlTool) NeedsConfirmation() bool { return false }
 func (w *WebCrawlTool) Description() string {
-	return "Crawl a website using a headless browser (Chromedp). Capable of rendering JavaScript and SPAs. Returns text content and optionally saves a screenshot."
+	return "Crawl one or more websites using a headless browser. Supports parallel crawling. Capable of rendering JavaScript and SPAs."
 }
 
 func (w *WebCrawlTool) Parameters() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"url":        map[string]any{"type": "string", "description": "The URL to crawl"},
-			"wait_for":   map[string]any{"type": "string", "description": "Optional CSS selector to wait for before extracting text (e.g. '#content' or '.main-article')"},
-			"screenshot": map[string]any{"type": "boolean", "description": "Set to true to capture a screenshot of the page"},
+			"url":        map[string]any{"type": "string", "description": "Single URL to crawl (legacy)"},
+			"urls":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "List of URLs to crawl in parallel"},
+			"wait_for":   map[string]any{"type": "string", "description": "Optional CSS selector to wait for"},
+			"screenshot": map[string]any{"type": "boolean", "description": "Take screenshots?"},
 		},
-		"required": []string{"url"},
+		"oneOf": []map[string]any{
+			{"required": []string{"url"}},
+			{"required": []string{"urls"}},
+		},
 	}
 }
 
@@ -46,89 +52,42 @@ func (w *WebCrawlTool) Execute(ctx context.Context, rawArgs string) (Result, err
 		return Result{Error: "invalid arguments: " + err.Error()}, nil
 	}
 
-	// 1. Try Crawl4AI (if available)
+	// Normalize URLs
+	var targets []string
+	if args.URL != "" {
+		targets = append(targets, args.URL)
+	}
+	if len(args.URLs) > 0 {
+		targets = append(targets, args.URLs...)
+	}
+	if len(targets) == 0 {
+		return Result{Error: "no URLs provided"}, nil
+	}
+
+	// Deduplicate
+	unique := make(map[string]bool)
+	var cleanTargets []string
+	for _, u := range targets {
+		if !unique[u] {
+			unique[u] = true
+			cleanTargets = append(cleanTargets, u)
+		}
+	}
+	args.URLs = cleanTargets
+
+	// 1. Try Crawl4AI (Service Batch)
 	if w.isCrawl4AIAvailable(ctx) {
-		result, err := w.crawlWithService(ctx, args)
+		result, err := w.crawlBatchWithService(ctx, args)
 		if err == nil {
 			return result, nil
 		}
-		// If failed, fall back to Chromedp
+		// Fallback if service fails
 	}
 
-	// 2. Fallback to Chromedp (Headless Browser)
-	// Create headless context
-	// We use Allocator to manage the browser instance
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Aseity/1.0"),
-	)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancel()
-
-	// Create new context with log output
-	ctx, cancel = chromedp.NewContext(allocCtx)
-	defer cancel()
-
-	// Set timeout for the crawl
-	ctx, cancel = context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-
-	var textContent string
-	var buf []byte
-
-	actions := []chromedp.Action{
-		chromedp.Navigate(args.URL),
-	}
-
-	// Wait logic
-	if args.WaitFor != "" {
-		actions = append(actions, chromedp.WaitVisible(args.WaitFor))
-	} else {
-		// Default: Wait for body to be loaded
-		actions = append(actions, chromedp.WaitVisible("body"))
-	}
-
-	// Extract text from body
-	// We could get innerText of body, or just simple text
-	// Let's get innerText of body
-	actions = append(actions, chromedp.Text("body", &textContent))
-
-	// Screenshot logic
-	if args.Screenshot {
-		actions = append(actions, chromedp.CaptureScreenshot(&buf))
-	}
-
-	// Execute actions
-	if err := chromedp.Run(ctx, actions...); err != nil {
-		if strings.Contains(err.Error(), "executable file not found") {
-			// Fallback to basic HTTP fetch
-			return w.fallbackFetch(args.URL)
-		}
-		// If generic error, try fallback anyway
-		return w.fallbackFetch(args.URL)
-	}
-
-	output := fmt.Sprintf("Crawled (via Chromedp): %s\n\nContent:\n%s", args.URL, truncateText(textContent, 5000))
-
-	if args.Screenshot && len(buf) > 0 {
-		// Save screenshot to temp file
-		cwd, _ := os.Getwd()
-		filename := fmt.Sprintf("screenshot_%d.png", time.Now().Unix())
-		path := filepath.Join(cwd, filename)
-		if err := os.WriteFile(path, buf, 0644); err != nil {
-			output += fmt.Sprintf("\n\n[Warning: Failed to save screenshot: %v]", err)
-		} else {
-			output += fmt.Sprintf("\n\n[Screenshot saved to: %s]", path)
-		}
-	}
-
-	return Result{Output: output}, nil
+	// 2. Fallback to Concurrent Chromedp/HTTP
+	return w.crawlBatchFallback(ctx, args)
 }
 
-// isCrawl4AIAvailable checks if the service is healthy
 func (w *WebCrawlTool) isCrawl4AIAvailable(ctx context.Context) bool {
 	url := os.Getenv("CRAWL4AI_URL")
 	if url == "" {
@@ -147,15 +106,14 @@ func (w *WebCrawlTool) isCrawl4AIAvailable(ctx context.Context) bool {
 	return resp.StatusCode == 200
 }
 
-// crawlWithService performs the crawl using the Docker microservice
-func (w *WebCrawlTool) crawlWithService(ctx context.Context, args webCrawlArgs) (Result, error) {
+func (w *WebCrawlTool) crawlBatchWithService(ctx context.Context, args webCrawlArgs) (Result, error) {
 	url := os.Getenv("CRAWL4AI_URL")
 	if url == "" {
 		url = "http://localhost:11235"
 	}
 
 	reqBody := map[string]interface{}{
-		"urls":     args.URL, // Service expects 'urls' (comma separated or single)
+		"urls":     args.URLs, // Pass array
 		"priority": 10,
 	}
 	if args.Screenshot {
@@ -164,7 +122,8 @@ func (w *WebCrawlTool) crawlWithService(ctx context.Context, args webCrawlArgs) 
 
 	jsonBody, _ := json.Marshal(reqBody)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Longer timeout for batch
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url+"/crawl", strings.NewReader(string(jsonBody)))
@@ -180,13 +139,10 @@ func (w *WebCrawlTool) crawlWithService(ctx context.Context, args webCrawlArgs) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return Result{}, fmt.Errorf("service returned status: %d", resp.StatusCode)
+		return Result{}, fmt.Errorf("service status: %d", resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-
-	// Parse response
-	// The service returns: { "results": [ { "url": "...", "markdown": "...", "html": "..." } ] }
 	var response struct {
 		Results []struct {
 			URL      string `json:"url"`
@@ -199,48 +155,122 @@ func (w *WebCrawlTool) crawlWithService(ctx context.Context, args webCrawlArgs) 
 		return Result{}, err
 	}
 
-	if len(response.Results) == 0 {
-		return Result{}, fmt.Errorf("no results from service")
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Batch Crawl (via Service) - %d URLs:\n\n", len(response.Results)))
+
+	for _, res := range response.Results {
+		content := res.Markdown
+		if content == "" {
+			content = htmlToText(res.HTML)
+		}
+		sb.WriteString(fmt.Sprintf("--- SOURCE: %s ---\n%s\n\n", res.URL, truncateText(content, 2000)))
 	}
 
-	// Get markdown content - Crawl4AI provides excellent markdown conversion
-	content := response.Results[0].Markdown
-	if content == "" {
-		// Fallback to HTML if markdown empty
-		content = htmlToText(response.Results[0].HTML)
-	}
-
-	output := fmt.Sprintf("Crawled (via Crawl4AI Service): %s\n\nContent:\n%s", args.URL, truncateText(content, 5000))
-	return Result{Output: output}, nil
+	return Result{Output: sb.String()}, nil
 }
 
-func (w *WebCrawlTool) fallbackFetch(url string) (Result, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (w *WebCrawlTool) crawlBatchFallback(ctx context.Context, args webCrawlArgs) (Result, error) {
+	var wg sync.WaitGroup
+	results := make([]string, len(args.URLs))
+	errs := make([]error, len(args.URLs))
+
+	// Limit concurrency to 3 to avoid resource exhaustion
+	sem := make(chan struct{}, 3)
+
+	for i, u := range args.URLs {
+		wg.Add(1)
+		go func(idx int, targetUrl string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Use single crawl logic
+			res, err := w.crawlSingleFallback(ctx, targetUrl, args.WaitFor, args.Screenshot)
+			if err != nil {
+				errs[idx] = err
+				results[idx] = fmt.Sprintf("Error crawling %s: %v", targetUrl, err)
+			} else {
+				results[idx] = res
+			}
+		}(i, u)
+	}
+
+	wg.Wait()
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Batch Crawl (Fallback) - %d URLs:\n\n", len(args.URLs)))
+
+	for _, r := range results {
+		sb.WriteString(r + "\n\n")
+	}
+
+	return Result{Output: sb.String()}, nil
+}
+
+func (w *WebCrawlTool) crawlSingleFallback(ctx context.Context, urlStr, waitFor string, screenshot bool) (string, error) {
+	// Chromedp logic recycled from original Execute
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("user-agent", "Mozilla/5.0 (compatible; Aseity/1.0)"),
+	)
+
+	allocCtx, cancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return Result{Error: "fallback failed: " + err.Error()}, nil
+	ctx, cancel = chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var textContent string
+	var buf []byte
+
+	actions := []chromedp.Action{chromedp.Navigate(urlStr)}
+	if waitFor != "" {
+		actions = append(actions, chromedp.WaitVisible(waitFor))
+	} else {
+		actions = append(actions, chromedp.WaitVisible("body"))
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Aseity/1.0; +http://aseity.app)")
+	actions = append(actions, chromedp.Text("body", &textContent))
+	if screenshot {
+		actions = append(actions, chromedp.CaptureScreenshot(&buf))
+	}
+
+	if err := chromedp.Run(ctx, actions...); err != nil {
+		// Fallback to HTTP
+		return w.basicHTTPFetch(urlStr)
+	}
+
+	output := fmt.Sprintf("--- SOURCE: %s (Chromedp) ---\n%s", urlStr, truncateText(textContent, 2000))
+	if screenshot && len(buf) > 0 {
+		cwd, _ := os.Getwd()
+		filename := fmt.Sprintf("screenshot_%d_%s.png", time.Now().Unix(), sanitizeFilename(urlStr))
+		path := filepath.Join(cwd, filename)
+		os.WriteFile(path, buf, 0644)
+		output += fmt.Sprintf("\n[Screenshot: %s]", path)
+	}
+	return output, nil
+}
+
+func (w *WebCrawlTool) basicHTTPFetch(urlStr string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	req.Header.Set("User-Agent", "Aseity/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return Result{Error: "fallback request failed: " + err.Error()}, nil
+		return "", err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return Result{Error: "failed to read fallback body: " + err.Error()}, nil
-	}
-
-	content := string(body)
-	// Reuse htmlToText from web.go (same package)
-	text := htmlToText(content)
-
-	output := fmt.Sprintf("[WARNING: Native browser not found. Using basic HTTP fallback. Install Chrome for better results.]\n\nCrawled (Fallback): %s\n\nContent:\n%s", url, truncateText(text, 5000))
-	return Result{Output: output}, nil
+	body, _ := io.ReadAll(resp.Body)
+	text := htmlToText(string(body))
+	return fmt.Sprintf("--- SOURCE: %s (HTTP) ---\n%s", urlStr, truncateText(text, 2000)), nil
 }
 
 func truncateText(s string, max int) string {
@@ -248,4 +278,13 @@ func truncateText(s string, max int) string {
 		return s[:max] + "\n... (truncated)"
 	}
 	return s
+}
+
+func sanitizeFilename(url string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '_'
+	}, url)
 }

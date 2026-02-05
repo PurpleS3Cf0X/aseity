@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,21 +27,36 @@ func TestWebCrawlTool_Crawl4AIIntegration(t *testing.T) {
 			var reqBody map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&reqBody)
 
-			if reqBody["urls"] == "" {
+			rawURLs := reqBody["urls"]
+			var urls []string
+
+			// Handle string or list
+			switch v := rawURLs.(type) {
+			case string:
+				urls = []string{v}
+			case []interface{}:
+				for _, u := range v {
+					urls = append(urls, u.(string))
+				}
+			}
+
+			if len(urls) == 0 {
 				http.Error(w, "missing urls", http.StatusBadRequest)
 				return
 			}
 
 			// Mock Response
-			response := map[string]interface{}{
-				"results": []map[string]interface{}{
-					{
-						"url":      reqBody["urls"],
-						"markdown": "# Crawl4AI Success\n\nThis content came from the mock service.",
-						"html":     "<h1>Crawl4AI Success</h1><p>This content came from the mock service.</p>",
-					},
-				},
+			response := map[string]interface{}{}
+			var results []map[string]interface{}
+
+			for _, u := range urls {
+				results = append(results, map[string]interface{}{
+					"url":      u,
+					"markdown": fmt.Sprintf("# Success %s\nContent", u),
+					"html":     "<h1>Success</h1>",
+				})
 			}
+			response["results"] = results
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -49,14 +65,14 @@ func TestWebCrawlTool_Crawl4AIIntegration(t *testing.T) {
 	}))
 	defer mockService.Close()
 
-	// 2. Set Env Var to point to mock service
+	// 2. Set Env Var
 	os.Setenv("CRAWL4AI_URL", mockService.URL)
 	defer os.Unsetenv("CRAWL4AI_URL")
 
-	// 3. Execute Tool
+	// 3. Execute Tool (Single)
 	tool := &WebCrawlTool{}
 	args := map[string]interface{}{
-		"url": "https://example.com",
+		"url": "https://example.com/1",
 	}
 	argsJSON, _ := json.Marshal(args)
 
@@ -68,21 +84,30 @@ func TestWebCrawlTool_Crawl4AIIntegration(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	// 4. Verify Results
-	expectedContent := "This content came from the mock service"
-	if !strings.Contains(result.Output, expectedContent) {
-		t.Errorf("Expected output to contain '%s', got: %s", expectedContent, result.Output)
+	if !strings.Contains(result.Output, "Success https://example.com/1") {
+		t.Errorf("Expected single output, got: %s", result.Output)
 	}
 
-	if !strings.Contains(result.Output, "Crawl4AI Service") {
-		t.Errorf("Expected output to indicate Crawl4AI usage, got: %s", result.Output)
+	// 4. Execute Tool (Batch)
+	argsBatch := map[string]interface{}{
+		"urls": []string{"https://example.com/A", "https://example.com/B"},
+	}
+	argsBatchJSON, _ := json.Marshal(argsBatch)
+
+	resultBatch, err := tool.Execute(ctx, string(argsBatchJSON))
+	if err != nil {
+		t.Fatalf("Batch Execution failed: %v", err)
+	}
+
+	if !strings.Contains(resultBatch.Output, "Success https://example.com/A") ||
+		!strings.Contains(resultBatch.Output, "Success https://example.com/B") {
+		t.Errorf("Expected batch output to contain both URLs, got: %s", resultBatch.Output)
 	}
 }
 
 func TestWebCrawlTool_Crawl4AIFallback(t *testing.T) {
 	// Test that it falls back to Chromedp (or HTTP in this case) if service is down
 
-	// Point to non-existent URL
 	os.Setenv("CRAWL4AI_URL", "http://localhost:9999")
 	defer os.Unsetenv("CRAWL4AI_URL")
 
@@ -95,7 +120,7 @@ func TestWebCrawlTool_Crawl4AIFallback(t *testing.T) {
 
 	tool := &WebCrawlTool{}
 	args := map[string]interface{}{
-		"url": targetServer.URL,
+		"urls": []string{targetServer.URL + "/1", targetServer.URL + "/2"},
 	}
 	argsJSON, _ := json.Marshal(args)
 
@@ -107,15 +132,10 @@ func TestWebCrawlTool_Crawl4AIFallback(t *testing.T) {
 		t.Fatalf("Fallback Execute failed: %v", err)
 	}
 
-	// Should NOT say "Crawl4AI Service"
-	if strings.Contains(result.Output, "Crawl4AI Service") {
-		t.Error("Should not use Crawl4AI service when down")
-	}
-
-	// Should contain fallback content
-	// Note: It might use Chromedp or HTTP depending on environment.
-	// Both should find "Fallback Content"
-	if !strings.Contains(result.Output, "Fallback Content") {
-		t.Errorf("Expected fallback content, got: %s", result.Output)
+	// Should contain fallback content for both
+	// We count occurrences of "Fallback Content"
+	count := strings.Count(result.Output, "Fallback Content")
+	if count < 2 {
+		t.Errorf("Expected fallback content for both URLs (count >= 2), got count %d\nOutput: %s", count, result.Output)
 	}
 }

@@ -43,15 +43,28 @@ The `web_crawl` tool is automatically available:
 
 ```
 User: Crawl https://example.com and extract the main content
-
 Agent: [TOOL:web_crawl|{"url": "https://example.com"}]
 ```
+
+### Parallel Crawling (New!) 🚀
+
+You can also request multiple URLs at once:
+
+```
+User: Research concurrent programming on https://go.dev and https://rust-lang.org
+Agent: [TOOL:web_crawl|{"urls": ["https://go.dev", "https://rust-lang.org"]}]
+```
+
+The tool will process these in parallel:
+- **With Crawl4AI**: Sends a batch request for efficient processing.
+- **Without Crawl4AI**: Spawns concurrent headless browsers (up to 3) for faster execution.
 
 ### Tool Arguments
 
 ```json
 {
-  "url": "https://example.com",      // Required
+  "url": "https://example.com",       // Single URL (Legacy)
+  "urls": ["https://a.com", "..."],   // List of URLs (Recommended for batch)
   "wait_for": "#content",             // Optional: CSS selector
   "screenshot": true                  // Optional: Capture screenshot
 }
