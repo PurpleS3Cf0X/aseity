@@ -135,6 +135,7 @@ const (
 
 type Model struct {
 	width, height int
+	headerHeight  int // Actual rendered header height (measured dynamically)
 	viewport      viewport.Model
 	textarea      textarea.Model
 	spinner       spinner.Model
@@ -260,8 +261,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		headerH := 8 // Estimated new header height
-		inputH := 3  // Minimal input
+		// Use actual measured header height instead of hardcoded value
+		// If headerHeight hasn't been set yet (first render), use a reasonable default
+		headerH := m.headerHeight
+		if headerH == 0 {
+			headerH = 10 // Initial estimate, will be corrected after first View()
+		}
+		inputH := 3 // Minimal input
 		menuH := 0
 		if m.menu.active {
 			menuH = 16 // 14 for list + 2 for borders/padding
@@ -1114,6 +1120,10 @@ func (m Model) View() string {
 		BorderForeground(DimGreen).
 		Width(m.width).
 		Render(headerInner)
+
+	// CRITICAL: Store the actual header height for viewport calculations
+	// This fixes the issue where hardcoded headerH causes scroll problems
+	actualHeaderHeight := lipgloss.Height(header)
 
 	// --- Input Area (Enhanced Box) ---
 	prompt := lipgloss.NewStyle().Foreground(Green).Bold(true).Render("> ")

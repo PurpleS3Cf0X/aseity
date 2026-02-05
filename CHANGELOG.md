@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.9.2] - 2026-02-05
+
+### Fixed
+- **Header Scroll Issue**: Fixed logo being pushed up when window expands
+  - Root cause: Hardcoded `headerH = 8` didn't match actual header height (varies between 7-10 lines)
+  - Solution: Added `headerHeight` field to Model struct to store actual measured height
+  - Viewport height now calculated using `lipgloss.Height(header)` for accuracy
+  - Layout properly adapts to window resize without scroll artifacts
+
+### Technical Details
+- `Update()` now uses `m.headerHeight` instead of hardcoded value
+- `View()` measures actual header height and updates model if changed
+- Viewport recalculates automatically when header height changes
+
+---
+
 ## [2.9.1] - 2026-02-05
 
 ### Fixed
