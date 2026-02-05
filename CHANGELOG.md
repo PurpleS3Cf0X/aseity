@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.11.2] - 2026-02-05
+
+### Added
+- **Client-Side Token Estimation**: Fallback for providers that don't return usage data
+  - Ollama's OpenAI-compatible endpoint doesn't return token counts
+  - Implemented word-based estimation (~1.3 tokens per word)
+  - Shows estimated counts with "~" prefix: `Tokens: ~150 → ~420 (~570 total, estimated)`
+  - Provides approximate usage tracking for all providers
+
+### Technical Details
+- Ollama's native API (`/api/chat`) returns `eval_count` and `prompt_eval_count`
+- OpenAI-compatible endpoint (`/v1/chat/completions`) returns null for usage
+- Client-side estimation counts words in last user/assistant exchange
+- Estimation formula: `tokens ≈ words × 1.3`
+
+---
+
 ## [2.11.1] - 2026-02-05
 
 ### Fixed
