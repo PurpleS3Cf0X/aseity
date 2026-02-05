@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.3] - 2026-02-05
+
+### Fixed
+- **TUI Banner Optimization**: Aggressively reduced banner padding and removed spacers to ensure the logo never truncates, even on terminals with mixed-width font rendering or narrow viewports.
+
+---
+
 ## [2.8.2] - 2026-02-05
 
 ### Fixed

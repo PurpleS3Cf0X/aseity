@@ -1092,7 +1092,6 @@ func (m Model) View() string {
 
 	headerInner := lipgloss.JoinHorizontal(lipgloss.Center,
 		lipgloss.NewStyle().PaddingLeft(2).Render(leftContent),
-		lipgloss.NewStyle().Width(4).Render(""),                                // Reduced Spacer
 		lipgloss.NewStyle().PaddingRight(2).PaddingTop(2).Render(rightContent), // Status
 	)
 
