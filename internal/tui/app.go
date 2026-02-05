@@ -368,18 +368,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancel()
 			return m, tea.Quit
 		case tea.KeyCtrlC:
-			if m.thinking {
+			// If agent is busy, cancel the operation
+			if m.thinking || m.confirming || m.currentTool != "" {
 				m.thinking = false
 				m.confirming = false
+				m.currentTool = ""
 				m.cancel()
 				m.ctx, m.cancel = context.WithCancel(context.Background())
 				// Preserve conversation history!
 				oldConv := m.agent.Conversation()
 				m.agent = agent.NewWithConversation(m.prov, m.toolReg, oldConv)
-				// m.messages = append(m.messages, chatMessage{role: "system", content: "  Cancelled."})
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  ⚠ Operation cancelled by user"})
 				m.rebuildView()
 				return m, nil
 			}
+			// Otherwise, quit normally
 			m.agent.Conversation().Save()
 			m.cancel()
 			return m, tea.Quit
@@ -408,6 +411,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Resume event loop
 				return m, m.waitForEvent()
+			}
+
+			// Block sending if agent is busy
+			if m.thinking || m.confirming {
+				// Don't spam messages - only show if user actually tried to send
+				if text != "" {
+					m.messages = append(m.messages, chatMessage{role: "system", content: "  ⏸ Agent is busy... (Ctrl+C to cancel)"})
+					m.rebuildView()
+				}
+				return m, nil
 			}
 
 			if text == "" {
@@ -560,8 +573,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	// Input Handling (only if menu not active)
-	if !m.thinking && !m.confirming && !m.menu.active {
+	// Input Handling - Allow typing even when thinking, just block sending
+	// Only block if menu is active
+	if !m.menu.active {
 		m.textarea, cmd = m.textarea.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -591,12 +605,17 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
     /quit        — exit aseity
 
   Keyboard shortcuts:
-    Enter        — send message
+    Enter        — send message (blocks if agent is busy)
     Alt+Enter    — new line
     Ctrl+T       — toggle thinking visibility
-    Ctrl+C       — cancel/quit
+    Ctrl+C       — cancel current operation / quit
     PgUp/PgDown  — scroll conversation
-    Esc          — quit`,
+    Esc          — quit
+
+  Tips:
+    • You can type while the agent is working
+    • Press Ctrl+C to interrupt long operations
+    • Messages are queued if agent is busy`,
 		})
 
 	case "/clear":
