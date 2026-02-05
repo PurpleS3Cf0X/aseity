@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.2] - 2026-02-05
+
+### Fixed
+- **TUI Header Truncation**: Fixed an issue where the logo banner appeared cut off on standard 80-column terminals by optimizing header spacing.
+
+---
+
 ## [2.8.1] - 2026-02-05
 
 ### Added

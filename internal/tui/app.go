@@ -1092,8 +1092,8 @@ func (m Model) View() string {
 
 	headerInner := lipgloss.JoinHorizontal(lipgloss.Center,
 		lipgloss.NewStyle().PaddingLeft(2).Render(leftContent),
-		lipgloss.NewStyle().Width(10).Render(""),                               // Spacer
-		lipgloss.NewStyle().PaddingRight(2).PaddingTop(2).Render(rightContent), // Push status down slightly to align with logo center
+		lipgloss.NewStyle().Width(4).Render(""),                                // Reduced Spacer
+		lipgloss.NewStyle().PaddingRight(2).PaddingTop(2).Render(rightContent), // Status
 	)
 
 	// Remove the border box (LogoBoxStyle) to fix "boundary too long"
