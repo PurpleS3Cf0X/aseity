@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -28,6 +29,7 @@ func main() {
 	providerFlag := flag.String("provider", "", "Provider name (ollama, vllm, openai, anthropic, google)")
 	modelFlag := flag.String("model", "", "Model name")
 	versionFlag := flag.Bool("version", false, "Print version")
+	updateFlag := flag.Bool("update", false, "Update to latest version from GitHub")
 	helpFlag := flag.Bool("help", false, "Show help")
 	flag.BoolVar(helpFlag, "h", false, "Show help")
 	yesFlag := flag.Bool("yes", false, "Auto-approve all tool execution")
@@ -45,6 +47,11 @@ func main() {
 
 	if *versionFlag {
 		fmt.Printf("aseity %s (%s)\n", version.Version, version.Commit)
+		os.Exit(0)
+	}
+
+	if *updateFlag {
+		cmdUpdate()
 		os.Exit(0)
 	}
 
@@ -614,4 +621,63 @@ func showHelp() {
 ` + tui.HelpStyle.Render("Documentation: https://github.com/PurpleS3Cf0X/aseity") + `
 `
 	fmt.Println(help)
+}
+
+func cmdUpdate() {
+	fmt.Println("🔄 Updating Aseity to latest version...")
+
+	// Check if we're in a git repository
+	if _, err := os.Stat(".git"); os.IsNotExist(err) {
+		fatal("Not in a git repository. Cannot update.")
+	}
+
+	// Get current version
+	currentVersion := version.Version
+	fmt.Printf("Current version: %s\n", currentVersion)
+
+	// Check for uncommitted changes
+	cmd := exec.Command("git", "status", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		fatal("Failed to check git status: %v", err)
+	}
+	if len(output) > 0 {
+		fmt.Println("⚠️  Warning: You have uncommitted changes.")
+		fmt.Print("Continue anyway? (y/N): ")
+		var response string
+		fmt.Scanln(&response)
+		if strings.ToLower(response) != "y" {
+			fmt.Println("Update cancelled.")
+			return
+		}
+	}
+
+	// Pull latest changes
+	fmt.Println("📥 Pulling latest changes...")
+	cmd = exec.Command("git", "pull", "origin", "master")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fatal("Failed to pull latest changes: %v", err)
+	}
+
+	// Rebuild binary
+	fmt.Println("🔨 Rebuilding binary...")
+	cmd = exec.Command("go", "build", "-v", "-o", "bin/aseity", "./cmd/aseity")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fatal("Failed to rebuild binary: %v", err)
+	}
+
+	// Get new version
+	cmd = exec.Command("./bin/aseity", "--version")
+	output, err = cmd.Output()
+	if err != nil {
+		fatal("Failed to get new version: %v", err)
+	}
+
+	fmt.Println("✅ Update complete!")
+	fmt.Printf("New version: %s", string(output))
+	fmt.Println("\nRestart Aseity to use the new version.")
 }

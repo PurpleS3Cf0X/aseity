@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.13.0] - 2026-02-05
+
+### Added
+- **Self-Update Feature**: New `--update` flag to update Aseity to latest version
+  - Automatically pulls latest changes from GitHub
+  - Rebuilds binary with latest code
+  - Checks for uncommitted changes before updating
+  - Displays version before and after update
+  - Usage: `aseity --update`
+
+### Technical Details
+- Added `cmdUpdate()` function in main.go
+- Uses `git pull origin master` to fetch latest changes
+- Rebuilds binary with `go build`
+- Prompts for confirmation if uncommitted changes exist
+
+---
+
 ## [2.12.0] - 2026-02-05
 
 ### Added
