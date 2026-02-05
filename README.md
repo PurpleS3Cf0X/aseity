@@ -6,7 +6,6 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 ![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 
-![Aseity TUI Demo](assets/screenshots/aseity_tui_demo.png)
 <img width="1055" height="808" alt="Screenshot 2026-02-05 at 6 39 48 PM" src="https://github.com/user-attachments/assets/d69e5a94-9a0b-4b3d-acc0-056dcc760c34" />
 
 
