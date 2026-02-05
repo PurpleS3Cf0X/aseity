@@ -1125,6 +1125,18 @@ func (m Model) View() string {
 	// This fixes the issue where hardcoded headerH causes scroll problems
 	actualHeaderHeight := lipgloss.Height(header)
 
+	// If header height changed, we need to recalculate viewport
+	if m.headerHeight != actualHeaderHeight {
+		m.headerHeight = actualHeaderHeight
+		// Recalculate viewport height with correct header height
+		inputH := 3
+		menuH := 0
+		if m.menu.active {
+			menuH = 16
+		}
+		m.viewport.Height = m.height - m.headerHeight - inputH - menuH
+	}
+
 	// --- Input Area (Enhanced Box) ---
 	prompt := lipgloss.NewStyle().Foreground(Green).Bold(true).Render("> ")
 	if m.thinking {
