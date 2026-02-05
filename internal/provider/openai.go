@@ -62,10 +62,13 @@ func (o *OpenAIProvider) Models(ctx context.Context) ([]string, error) {
 }
 
 type oaiRequest struct {
-	Model    string       `json:"model"`
-	Messages []oaiMessage `json:"messages"`
-	Stream   bool         `json:"stream"`
-	Tools    []oaiTool    `json:"tools,omitempty"`
+	Model         string       `json:"model"`
+	Messages      []oaiMessage `json:"messages"`
+	Stream        bool         `json:"stream"`
+	Tools         []oaiTool    `json:"tools,omitempty"`
+	StreamOptions *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options,omitempty"`
 }
 
 type oaiMessage struct {
@@ -135,7 +138,15 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 		})
 	}
 
-	body := oaiRequest{Model: o.model, Messages: oaiMsgs, Stream: true, Tools: oaiTools}
+	body := oaiRequest{
+		Model:    o.model,
+		Messages: oaiMsgs,
+		Stream:   true,
+		Tools:    oaiTools,
+		StreamOptions: &struct {
+			IncludeUsage bool `json:"include_usage"`
+		}{IncludeUsage: true},
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, err

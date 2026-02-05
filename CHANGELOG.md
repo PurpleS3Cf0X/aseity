@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.11.1] - 2026-02-05
+
+### Fixed
+- **Token Usage Display**: Added `stream_options.include_usage` parameter to API requests
+  - Enables token usage reporting from Ollama and OpenAI-compatible providers
+  - Required for streaming responses to include usage information
+  - Should now display token counts after each response
+
+---
+
 ## [2.11.0] - 2026-02-05
 
 ### Added
