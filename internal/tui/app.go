@@ -1033,6 +1033,24 @@ func (m *Model) renderUserBlock(content string) string {
 }
 
 func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) string {
+	// Extract token usage if present
+	var usageLine string
+	contentToRender := content
+
+	// Check if content contains token usage
+	if strings.Contains(content, "Tokens:") {
+		lines := strings.Split(content, "\n")
+		var contentLines []string
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "Tokens:") {
+				usageLine = strings.TrimSpace(line)
+			} else {
+				contentLines = append(contentLines, line)
+			}
+		}
+		contentToRender = strings.Join(contentLines, "\n")
+	}
+
 	var body string
 	if isWelcome {
 		// Custom banner handling within the block
@@ -1040,12 +1058,12 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 		// Reconstruct banner?
 		// The original code rendered banner separately.
 		// Let's just render content.
-		body = AssistantMsgStyle.Render(content)
+		body = AssistantMsgStyle.Render(contentToRender)
 	} else {
 		// Render markdown
-		rendered, err := m.renderer.Render(content)
+		rendered, err := m.renderer.Render(contentToRender)
 		if err != nil {
-			body = content
+			body = contentToRender
 		} else {
 			body = rendered
 		}
@@ -1056,12 +1074,24 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 	// If content starts with "# Plan" or similar, maybe distinct style?
 	// For now, standard assistant block.
 
-	return AssistantBlockStyle.Render(
+	result := AssistantBlockStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
 			RoleHeaderStyle.Foreground(Cyan).Render(title),
 			body,
 		),
-	) + "\n"
+	)
+	
+	// If we extracted token usage, display it below the box with custom styling
+	if usageLine != "" {
+		tokenStyle := lipgloss.NewStyle().
+			Foreground(DimGreen).
+			Italic(true).
+			PaddingLeft(2)
+		result += "\n" + tokenStyle.Render(usageLine)
+	}
+	
+	return result
+} + "\n"
 }
 
 func (m *Model) renderThinkingBlock(content string) string {

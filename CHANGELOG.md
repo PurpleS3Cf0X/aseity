@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.12.0] - 2026-02-05
+
+### Added
+- **Improved Token Usage Display**: Token usage now displays outside response box with better styling
+  - Extracted from message content and displayed separately
+  - Styled in dim green italic text with left padding
+  - Appears below the response box for better visibility
+  - Format: `  Tokens: ~X → ~Y (~Z total, estimated)`
+
+### Technical Details
+- Modified `renderAssistantBlock` to extract token usage from content
+- Token usage no longer rendered inside markdown content
+- Custom lipgloss styling applied (DimGreen, Italic, PaddingLeft)
+- Cleaner separation between response and metadata
+
+---
+
 ## [2.11.5] - 2026-02-05
 
 ### Changed
