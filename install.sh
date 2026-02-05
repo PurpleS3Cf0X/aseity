@@ -105,6 +105,49 @@ if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     ensure_cmd curl curl
 fi
 
+# Check if running from source (for easy updates)
+if [ -d ".git" ] && [ -f "go.mod" ]; then
+    # Simple check if we are in the aseity repo
+    if grep -q "module github.com/jeanpaul/aseity" go.mod || grep -q "module github.com/PurpleS3Cf0X/aseity" go.mod; then
+        info "Running from source repository."
+        if confirm "Install as symlink? (Enables 'aseity --update' to work)"; then
+            info "Building from source..."
+            
+            # Ensure bin directory exists
+            mkdir -p bin
+            
+            # Build
+            if command -v go >/dev/null 2>&1; then
+                go build -v -o "bin/${BINARY}" ./cmd/aseity
+            else
+                error "Go is required to build from source."
+            fi
+            
+            # Resolve absolute path for symlink
+            PWD=$(pwd)
+            SOURCE_BIN="${PWD}/bin/${BINARY}"
+            
+            info "Symlinking ${SOURCE_BIN} to ${INSTALL_DIR}/${BINARY}..."
+            
+            CMD="ln -sf ${SOURCE_BIN} ${INSTALL_DIR}/${BINARY}"
+            
+            if [ -w "$INSTALL_DIR" ]; then
+                $CMD
+            else
+                if confirm "Install to ${INSTALL_DIR}? (Requires sudo)"; then
+                    sudo $CMD
+                else
+                    error "Installation aborted."
+                fi
+            fi
+            
+            success "Installed aseity (symlinked)"
+            info "You can now run 'aseity --update' to update this installation."
+            exit 0
+        fi
+    fi
+fi
+
 # Get latest release tag
 info "Fetching latest release..."
 if command -v curl >/dev/null 2>&1; then
