@@ -113,13 +113,39 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 }
 
 // NewWithConversation creates an agent using an existing conversation history.
+// It preserves the full agent state including skillsets and configuration.
 func NewWithConversation(prov provider.Provider, registry *tools.Registry, conv *Conversation) *Agent {
+	// Load user configuration (same as New())
+	userConfig, err := skillsets.LoadUserConfig()
+	if err != nil {
+		// Log error but continue with defaults
+		fmt.Printf("Warning: Failed to load user config: %v\n", err)
+		userConfig = &skillsets.UserConfig{}
+		*userConfig = skillsets.DefaultUserConfig()
+	}
+
+	// Detect model capabilities (same as New())
+	modelName := prov.ModelName()
+	defaultProfiles := skillsets.DefaultProfiles()
+	mergedProfiles := skillsets.MergeProfiles(defaultProfiles, userConfig)
+
+	var profile skillsets.ModelProfile
+	if p, ok := mergedProfiles[modelName]; ok {
+		profile = p
+	} else {
+		// Fallback to detection
+		profile = skillsets.DetectModelProfile(modelName)
+	}
+
 	return &Agent{
-		prov:      prov,
-		tools:     registry,
-		conv:      conv,
-		ConfirmCh: make(chan bool, 1),
-		InputCh:   make(chan string, 1),
+		prov:       prov,
+		tools:      registry,
+		conv:       conv,
+		ConfirmCh:  make(chan bool, 1),
+		InputCh:    make(chan string, 1),
+		RequestCh:  make(chan struct{}),
+		profile:    profile,
+		userConfig: userConfig,
 	}
 }
 
