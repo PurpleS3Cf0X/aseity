@@ -1232,11 +1232,19 @@ func (m Model) View() string {
 		if m.menu.active {
 			menuH = 16
 		}
-		m.viewport.Height = m.height - m.headerHeight - inputH - menuH
+		newHeight := m.height - m.headerHeight - inputH - menuH
+		if newHeight < 0 {
+			newHeight = 0
+		}
+		m.viewport.Height = newHeight
+
 		// CRITICAL: Since View operates on a copy, and we just shrank the viewport (likely),
 		// we must re-clamp the YOffset to ensure we stick to the bottom if we were at the bottom.
 		// Since we usually want to be at bottom for chat, let's force it for this frame.
-		m.viewport.GotoBottom()
+		// ONLY if height is valid to avoid panic
+		if m.viewport.Height > 0 {
+			m.viewport.GotoBottom()
+		}
 	}
 
 	// --- Input Area (Enhanced Box) ---

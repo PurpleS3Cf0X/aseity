@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.15.2] - 2026-02-05
+
+### Fixed
+- **Startup Panic**: Fixed a crash on startup where viewport height could become negative before initialization
+- **Stability**: Added safety guards for viewport calculations during resize events
+
+---
+
 ## [2.15.1] - 2026-02-05
 
 ### Fixed
