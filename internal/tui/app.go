@@ -1077,6 +1077,7 @@ func (m Model) View() string {
 		contextState = "Running Tool..."
 	}
 
+	// Build the status block (right side)
 	rightContent := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().Foreground(ClaudeAccent).Bold(true).Render("STATUS"),
 		lipgloss.NewStyle().Foreground(White).Render(contextState),
@@ -1086,20 +1087,32 @@ func (m Model) View() string {
 		lipgloss.NewStyle().Foreground(DimGreen).Render("Ctrl+C to quit"),
 	)
 
-	// Layout: Logo on Left, Status on Right
-	// Use Top alignment for horizontal join to keep them at same baseline
+	// Measure actual widths
+	logoWidth := lipgloss.Width(logo)
+	statusWidth := lipgloss.Width(rightContent)
+	spacerWidth := 8 // Space between logo and status
+
+	// Total content width
+	totalContentWidth := logoWidth + spacerWidth + statusWidth
+
+	// Calculate left margin to center the content
+	leftMargin := 0
+	if m.width > totalContentWidth {
+		leftMargin = (m.width - totalContentWidth) / 2
+	}
+
+	// Build header with proper spacing and centering
 	headerInner := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().PaddingLeft(2).Render(leftContent),
-		lipgloss.NewStyle().Width(6).Render(""), // Spacer
-		lipgloss.NewStyle().PaddingRight(2).Render(rightContent),
+		lipgloss.NewStyle().MarginLeft(leftMargin).Render(leftContent),
+		lipgloss.NewStyle().Width(spacerWidth).Render(""),
+		rightContent,
 	)
 
-	// Center the entire header block horizontally
+	// Render header with bottom border
 	header := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(DimGreen).
 		Width(m.width).
-		Align(lipgloss.Center).
 		Render(headerInner)
 
 	// --- Input Area (Enhanced Box) ---

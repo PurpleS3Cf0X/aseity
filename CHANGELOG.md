@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.9.1] - 2026-02-05
+
+### Fixed
+- **Dynamic Header Centering**: Properly calculates content width and centers banner based on actual window size
+- Header now measures logo and status widths dynamically and adds appropriate left margin
+- Layout adapts correctly to window resize events
+- Banner stays centered regardless of terminal width
+
+---
+
 ## [2.9.0] - 2026-02-05
 
 ### Changed
