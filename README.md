@@ -10,7 +10,8 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 
 - **Local-first** — Run models on your own machine with Ollama or vLLM
 - **Multi-provider** — Switch between Ollama, OpenAI, Anthropic, Google, or any OpenAI-compatible API
-- **Interactive TUI** — Beautiful terminal interface with syntax highlighting and animated aesthetics
+- **Parallel Web Crawling** — **New in v2.8.1!** Scrape multiple sites concurrently using Crawl4AI or local browsers
+- **Interactive TUI** — Beautiful terminal interface with "Premium Matrix" aesthetics, syntax highlighting, and animated boundaries
 - **Interactive Tools** — **New in v1.0.5!** Supports interactive commands like `sudo`, `ssh`, and scripts that ask for passwords or input
 - **Tool use** — Execute shell commands, read/write files, search the web
 - **Sub-agents** — Spawn autonomous agents recursively for complex task decomposition
@@ -93,6 +94,14 @@ aseity "Check disk space on /" > output.txt
 aseity -y "Scan localhost ports" | grep "80/tcp"
 ```
 
+### Parallel Crawling (New in v2.8.1)
+
+Research multiple topics effectively with concurrent browsing:
+
+```bash
+aseity "Research Go concurrency patterns on go.dev AND concurrency in Rust on rust-lang.org simultaneously"
+```
+Aseity will spawn parallel browser instances to fetch both pages at once.
 
 ### In the Chat
 

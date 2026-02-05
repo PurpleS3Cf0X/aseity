@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.8.1] - 2026-02-05
+
+### Added
+- **Parallel Web Crawling**: Support for batch URL processing in `web_crawl` tool 🚀
+  - Batching via Crawl4AI service for high-performance scraping
+  - Concurrent headless browser fallbacks (up to 3 parallel tabs)
+  - Seamless fallback handling for mixed success results
+- **Visual TUI Redesign**: "Premium Matrix" Aesthetic 🎨
+  - **Neon Green Input Box**: Distinct, rounded border for the command input
+  - **Viewport Boundaries**: Clear separation for the chat content
+  - Improved layout logic to prevent text wrapping/overflow
+
+### Fixed
+- **Dynamic Skillsets**: Prevented context bloat by making injected system prompts temporary (one-time use)
+
+### Changed
+- `web_crawl` now accepts `urls` array argument in addition to single `url`
+
+---
+
 ## [2.8.0] - 2026-02-05
 
 ### Added
