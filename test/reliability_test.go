@@ -37,6 +37,8 @@ func (m *MockProviderForNudge) Chat(ctx context.Context, history []provider.Mess
 }
 
 func (m *MockProviderForNudge) Name() string { return "MockNudge" }
+
+func (m *MockProviderForNudge) ModelName() string { return "test-model" }
 func (m *MockProviderForNudge) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock-model"}, nil
 }

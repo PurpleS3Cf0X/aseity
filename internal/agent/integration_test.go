@@ -97,6 +97,8 @@ func (m *MockProviderParallelCancel) Chat(ctx context.Context, messages []provid
 }
 
 func (m *MockProviderParallelCancel) Name() string { return "mock" }
+
+func (m *MockProviderParallelCancel) ModelName() string { return "test-model" }
 func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderParallelCancel) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil
@@ -321,6 +323,8 @@ func (m *MockProviderMixed) Chat(ctx context.Context, messages []provider.Messag
 }
 
 func (m *MockProviderMixed) Name() string { return "mock" }
+
+func (m *MockProviderMixed) ModelName() string { return "test-model" }
 func (m *MockProviderFallback) ModelName() string { return "test-model" }
 func (m *MockProviderMixed) Models(ctx context.Context) ([]string, error) {
 	return []string{"mock"}, nil

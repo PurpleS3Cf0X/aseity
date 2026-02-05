@@ -302,13 +302,16 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 						return
 					}
 
+					// Check for errors and suggest corrections
 					if res.Error != "" {
-						a.conv.AddToolResult(tc.ID, res.Error)
-						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Error}
-					} else {
-						a.conv.AddToolResult(tc.ID, res.Output)
-						events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Output}
+						correction := a.suggestCorrection(tc, res.Error)
+						if correction != "" {
+							res.Output = fmt.Sprintf("%s\n\n💡 Suggestion: %s", res.Output, correction)
+						}
 					}
+
+					a.conv.AddToolResult(tc.ID, res.Output)
+					events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Output}
 				}(tc)
 			}
 
@@ -361,6 +364,14 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
 				case <-ctx.Done():
 					return
 				}
+			}
+
+			// Validate tool call before execution
+			if err := a.validateToolCall(tc); err != nil {
+				result := fmt.Sprintf("Validation failed: %v", err)
+				a.conv.AddToolResult(tc.ID, result)
+				events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: result}
+				continue
 			}
 
 			// Execute
