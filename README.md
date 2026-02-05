@@ -6,6 +6,9 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 ![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 
+![Aseity TUI Demo](assets/screenshots/aseity_tui_demo.png)
+
+
 ## Features
 
 - **Local-first** — Run models on your own machine with Ollama or vLLM
