@@ -179,16 +179,14 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 	if a.OriginalGoal == "" {
 		a.OriginalGoal = userMsg
 	}
+	var contextPrompt string
 	// Dynamic skillset injection (if enabled)
 	if a.userConfig != nil && a.userConfig.Settings.EnableDynamicSkillsets {
 		intent := skillsets.DetectIntent(userMsg)
-		contextPrompt := skillsets.BuildContextualPrompt(intent, a.profile)
+		contextPrompt = skillsets.BuildContextualPrompt(intent, a.profile)
 
-		// Add context-specific training as a system message
+		// Log intent detection for debugging if prompt is generated
 		if contextPrompt != "" {
-			a.conv.AddSystem(contextPrompt)
-
-			// Log intent detection for debugging
 			events <- Event{
 				Type: EventThinking,
 				Text: fmt.Sprintf("🎯 Detected intent: %s", skillsets.IntentName(intent)),
@@ -198,14 +196,19 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 
 	// Add user message to conversation
 	a.conv.AddUser(userMsg)
-	a.runLoop(ctx, events)
+	a.runLoop(ctx, events, contextPrompt)
 }
 
-func (a *Agent) runLoop(ctx context.Context, events chan<- Event) {
+func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemPrompt string) {
 	qualityGateRetries := 0
 	for turn := 0; turn < MaxTurns; turn++ {
 		// Construct the context with a dynamic reminder
 		msgs := a.conv.Messages()
+
+		// Inject dynamic skillset training temporarily (if any)
+		if tempSystemPrompt != "" {
+			msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: tempSystemPrompt})
+		}
 
 		// Inject a reminder at the end of context to keep the model focused
 		reminder := fmt.Sprintf("Turn %d/%d. Review the history. If you just ran a command, did it work? If it failed, try a DIFFERENT approach. Do not repeat mistakes.", turn+1, MaxTurns)
