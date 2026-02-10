@@ -198,6 +198,17 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
+				// Flush any remaining content before finishing
+				if contentBuf.Len() > 0 {
+					remaining := contentBuf.String()
+					if inThink {
+						ch <- StreamChunk{Thinking: remaining}
+					} else {
+						ch <- StreamChunk{Delta: remaining}
+					}
+					contentBuf.Reset()
+				}
+
 				var tcs []ToolCall
 				for _, tc := range toolCalls {
 					tcs = append(tcs, *tc)
@@ -309,7 +320,21 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 					toolCalls[idx].Name = tc.Function.Name
 				}
 			}
+			// Helper to flush remaining buffer
+			flush := func() {
+				if contentBuf.Len() > 0 {
+					remaining := contentBuf.String()
+					if inThink {
+						ch <- StreamChunk{Thinking: remaining}
+					} else {
+						ch <- StreamChunk{Delta: remaining}
+					}
+					contentBuf.Reset()
+				}
+			}
+
 			if chunk.Choices[0].FinishReason != nil {
+				flush() // Flush any remaining content before finishing
 				var tcs []ToolCall
 				for _, tc := range toolCalls {
 					tcs = append(tcs, *tc)
@@ -327,6 +352,17 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 				return
 			}
 		}
+
+		// Final safety flush if loop exits without [DONE] or FinishReason
+		if contentBuf.Len() > 0 {
+			remaining := contentBuf.String()
+			if inThink {
+				ch <- StreamChunk{Thinking: remaining}
+			} else {
+				ch <- StreamChunk{Delta: remaining}
+			}
+		}
+
 		if err := scanner.Err(); err != nil {
 			ch <- StreamChunk{Error: err, Done: true}
 		}

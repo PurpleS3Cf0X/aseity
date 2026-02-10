@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.18.3] - 2026-02-10
+
+### Fixed
+- **Stuck Responses**: Fixed a critical buffer flushing issue where the end of a response (or short responses) could be lost, making the agent appear "stuck".
+- **Stream Reliability**: Added safety flushes for unexpected stream closures.
+
+---
+
 ## [2.18.2] - 2026-02-10
 
 ### Fixed
