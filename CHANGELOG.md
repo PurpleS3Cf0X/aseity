@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.21.0] - 2026-02-10
+
+### Added
+- **Model Name Validation**: Automatically detects and corrects invalid model names
+  - Maps `ollama/qwen2.5:32b` → `qwen2.5:32b` (removes incorrect prefix)
+  - Fixes common typos: `qwen2.5-32b` → `qwen2.5:32b`
+  - Suggests similar models when name not found
+  - Shows popular models with sizes and descriptions
+- **Better Pull Commands**: Shows correct `ollama pull` command in messages
+
+### Improved
+- Model pull now validates names before attempting download
+- Interactive correction: asks user to confirm suggested model name
+- Helpful error messages with model suggestions when invalid name provided
+
+### Example
+```
+$ aseity --model ollama/qwen2.5:32b
+⚠ Did you mean 'qwen2.5:32b'? (removing 'ollama/' prefix)
+  Use 'qwen2.5:32b' instead? [Y/n]
+```
+
+---
+
 ## [2.20.1] - 2026-02-10
 
 ### Fixed

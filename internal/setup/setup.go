@@ -199,9 +199,28 @@ func StartOllama() error {
 }
 
 func PullModel(model string) error {
+	// Validate and correct model name
+	corrected, suggestion, err := ValidateModelName(model)
+	if err != nil {
+		// Model not found
+		fail(fmt.Sprintf("Invalid model name: %s", model))
+		fmt.Println()
+		fmt.Println(suggestion)
+		return err
+	}
+
+	if suggestion != "" {
+		// Model name was corrected
+		warn(suggestion)
+		if !askYN(fmt.Sprintf("Use '%s' instead?", corrected), true) {
+			return fmt.Errorf("model pull cancelled")
+		}
+		model = corrected
+	}
+
 	step(fmt.Sprintf("Pulling model %s...", model))
 	info(fmt.Sprintf("Downloading %s - this may take a while depending on model size and network speed", model))
-	info("Tip: You can also pull manually with: ollama pull " + model)
+	info(fmt.Sprintf("Correct pull command: ollama pull %s", model))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
