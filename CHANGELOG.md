@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.20.1] - 2026-02-10
+
+### Fixed
+- **Model Pull Timeout**: Increased model verification timeout from 15s to 60s to handle large models
+- **Better Error Messages**: Added troubleshooting steps when model pull fails
+- **Progress Indicators**: Show verification progress every 5 seconds during model loading
+- **Helpful Tips**: Added manual pull command suggestions in error messages
+
+### Improved
+- Model pull now shows clearer progress and status messages
+- Better error handling for Ollama connectivity issues
+
+---
+
 ## [2.20.0] - 2026-02-10
 
 ### Added

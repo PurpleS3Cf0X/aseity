@@ -200,7 +200,8 @@ func StartOllama() error {
 
 func PullModel(model string) error {
 	step(fmt.Sprintf("Pulling model %s...", model))
-	info("This may take a while depending on model size and network speed")
+	info(fmt.Sprintf("Downloading %s - this may take a while depending on model size and network speed", model))
+	info("Tip: You can also pull manually with: ollama pull " + model)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -220,7 +221,11 @@ func PullModel(model string) error {
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("pull failed (HTTP %d): %s", resp.StatusCode, string(b))
+		errMsg := string(b)
+		if errMsg == "" {
+			errMsg = "unknown error"
+		}
+		return fmt.Errorf("pull failed (HTTP %d): %s\n\nTroubleshooting:\n  1. Check if Ollama is running: ollama list\n  2. Try pulling manually: ollama pull %s\n  3. Check Ollama logs: journalctl -u ollama (Linux) or check Docker logs", resp.StatusCode, errMsg, model)
 	}
 
 	// Stream progress
@@ -263,15 +268,20 @@ func PullModel(model string) error {
 
 	// Verify model is actually available after pull
 	info("Verifying model is ready...")
-	for i := 0; i < 30; i++ {
+	maxAttempts := 120 // 60 seconds total (120 * 500ms)
+	for i := 0; i < maxAttempts; i++ {
 		time.Sleep(500 * time.Millisecond)
 		if IsModelAvailable(model) {
 			success(fmt.Sprintf("Model %s ready", model))
 			return nil
 		}
+		// Show progress every 5 seconds
+		if i > 0 && i%10 == 0 {
+			fmt.Printf("\r  Still verifying... (%ds elapsed)", i/2)
+		}
 	}
 
-	return fmt.Errorf("model pull completed but model not available after 15 seconds")
+	return fmt.Errorf("model pull completed but model not available after %d seconds - try running 'ollama list' to check", maxAttempts/2)
 }
 
 // OllamaBaseURL is exposed for testing
