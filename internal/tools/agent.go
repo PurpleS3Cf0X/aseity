@@ -86,10 +86,13 @@ func (s *SpawnAgentTool) Execute(ctx context.Context, rawArgs string) (Result, e
 	judge := NewJudgeTool(s.spawner)
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+
 		// 1. Prepare Task Wrapper
 		finalTask := currentTask
 		if args.AgentName != "" {
-			finalTask = fmt.Sprintf("You are acting as the '%s' agent. Your specific objective is:\n%s\n\nINSTRUCTIONS:\n1. Analyze the request.\n2. Create a plan in a <thought> block.\n3. Execute the plan effectively.", args.AgentName, currentTask)
+			finalTask = fmt.Sprintf("You are acting as the '%s' agent. Your specific objective is:\n%s\n\nINSTRUCTIONS:\n1. Analyze the request.\n2. Create a plan in a <thought> block.\n3. Execute the plan effectively.\n\nIMPORTANT: When you complete your task, your final message MUST be a concise summary of what you did, in the following format:\n\nTASK COMPLETED: <summary of actions>\nFiles Modified: [file1, file2]\nStatus: SUCCESS", args.AgentName, currentTask)
+		} else {
+			finalTask = fmt.Sprintf("%s\n\nIMPORTANT: When you complete your task, your final message MUST be a concise summary of what you did, in the following format:\n\nTASK COMPLETED: <summary of actions>\nFiles Modified: [file1, file2]\nStatus: SUCCESS", currentTask)
 		}
 
 		if attempt > 1 {
