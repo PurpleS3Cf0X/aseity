@@ -87,7 +87,8 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 
 	conv := NewConversation()
 	if systemPrompt == "" {
-		systemPrompt = BuildSystemPrompt()
+		// Use tier-specific system prompt for better guidance
+		systemPrompt = BuildSystemPromptForTier(profile.Tier)
 	}
 
 	// Inject base skillsets into system prompt
@@ -538,29 +539,21 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 			if res.Error != "" {
 				errMsg := res.Error
 				fmt.Printf("DEBUG: Nudging result error: '%s'\n", errMsg) // DEBUG
-				if strings.Contains(errMsg, "unknown tool") {
-					suggestions := make([]string, 0)
-					// Simple heuristic for common hallucinations
-					lowerName := strings.ToLower(tc.Name)
-					if strings.Contains(lowerName, "fetch") {
-						suggestions = append(suggestions, "web_fetch")
-					} else if strings.Contains(lowerName, "crawl") {
-						suggestions = append(suggestions, "web_crawl")
-					} else if strings.Contains(lowerName, "write") {
-						suggestions = append(suggestions, "file_write")
-					} else if strings.Contains(lowerName, "read") {
-						suggestions = append(suggestions, "file_read")
-					}
-
-					if len(suggestions) > 0 {
-						errMsg += fmt.Sprintf(". Did you mean '%s'? Please retry with the correct name.", suggestions[0])
-					} else {
-						errMsg += ". Please check the 'Available Tools' list and retry with a valid tool name."
-					}
+				// If it's a system error (e.g., tool not found), provide a nudge
+				if strings.Contains(errMsg, "unknown tool") || strings.Contains(errMsg, "not found") {
+					errMsg += "\n\n💡 Hint: Check the tool name. Available tools are listed in the system prompt."
 				}
 				output += "\nError: " + errMsg
 			}
 			a.conv.AddToolResult(tc.ID, output)
+
+			// For Tier 2/3 models, inject a reminder to use the tool result
+			if a.profile.Tier >= 2 && len(output) > 50 {
+				// Add a system message reminding the model to use the result
+				resultReminder := fmt.Sprintf("REMINDER: You just received a result from %s. You MUST read and use this ACTUAL data in your response. Do NOT make up information.", tc.Name)
+				a.conv.AddSystem(resultReminder)
+			}
+
 			events <- Event{
 				Type: EventToolResult, ToolID: tc.ID,
 				ToolName: tc.Name, ToolArgs: prettyArgs, Result: output,

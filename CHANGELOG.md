@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.19.0] - 2026-02-10
+
+### Added
+- **Tier-Specific System Prompts**: Models now receive guidance tailored to their capability tier
+  - Tier 2/3 models get explicit step-by-step workflows and result verification checklists
+  - Includes common mistakes to avoid and best practices for tool usage
+- **Result Acknowledgment Reminders**: Tier 2/3 models receive automatic reminders to use tool results after execution
+- **Result Processor Component**: Infrastructure for validating tool result usage (foundation for Phase 2)
+- **Completion Checker Component**: Infrastructure for preventing premature task completion (foundation for Phase 2)
+
+### Improved
+- **Model Guidance**: Weaker models now have much more explicit instructions on how to:
+  - Read and process tool results
+  - Avoid hallucinating data
+  - Complete multi-step tasks
+  - Verify their work before finishing
+
+---
+
 ## [2.18.4] - 2026-02-10
 
 ### Fixed
