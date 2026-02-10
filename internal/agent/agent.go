@@ -547,11 +547,31 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 			}
 			a.conv.AddToolResult(tc.ID, output)
 
-			// For Tier 2/3 models, inject a reminder to use the tool result
+			// For Tier 2/3 models, inject ReAct prompt to force observation and reflection
 			if a.profile.Tier >= 2 && len(output) > 50 {
-				// Add a system message reminding the model to use the result
-				resultReminder := fmt.Sprintf("REMINDER: You just received a result from %s. You MUST read and use this ACTUAL data in your response. Do NOT make up information.", tc.Name)
-				a.conv.AddSystem(resultReminder)
+				// Build ReAct prompt
+				reactPrompt := fmt.Sprintf(`
+🔄 REACT LOOP - You just executed %s
+
+Follow the ReAct pattern NOW:
+
+1. **OBSERVATION**: What data did you receive from %s?
+   - Be specific! Describe the key information you got
+   - Example: "I received page content showing..."
+   
+2. **THOUGHT**: Analyze what this means
+   - Does this answer the user's original question: "%s"?
+   - What did you learn from this result?
+   - Do you have enough information now?
+   
+3. **DECISION**: What will you do next?
+   - If you have the answer → Provide it using the ACTUAL data
+   - If you need more info → Call another tool
+   - DO NOT say "Awaiting user command"
+
+Respond following this structure.`, tc.Name, tc.Name, a.OriginalGoal)
+
+				a.conv.AddSystem(reactPrompt)
 			}
 
 			events <- Event{

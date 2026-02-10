@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.20.0] - 2026-02-10
+
+### Added
+- **ReAct Chain-of-Thought Pattern**: Implemented Reasoning + Acting loop for Tier 2/3 models
+  - System prompts now include explicit ReAct instructions: Thought → Action → Observation → Thought
+  - Comprehensive examples showing correct vs incorrect patterns
+  - After each tool execution, models receive ReAct prompts forcing:
+    1. **OBSERVATION**: "What data did you receive?"
+    2. **THOUGHT**: "What does this mean? Does it answer the question?"
+    3. **DECISION**: "Call another tool or provide final answer?"
+  - Prevents "Awaiting user command" premature stops
+
+### Improved
+- **Post-Tool Prompting**: Replaced simple reminders with structured ReAct prompts
+  - Includes original user goal in prompt for context
+  - Forces explicit reasoning about next steps
+  - Prevents tool result abandonment
+
+### Notes
+- ReAct improvements provide better scaffolding but require models with baseline reasoning capability
+- Very weak models (e.g., qwen2.5:14b) may still struggle with basic intent understanding
+- **Recommendation**: For production use, prefer Tier 1 models (GPT-4, Claude, Gemini Pro)
+
+---
+
 ## [2.19.0] - 2026-02-10
 
 ### Added
