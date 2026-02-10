@@ -16,8 +16,8 @@ func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, p
 	// Create the agent
 	agt := agent.New(prov, toolReg, "")
 
-	// Channel for events
-	events := make(chan agent.Event)
+	// Channel for events - MUST be buffered for parallel tool execution
+	events := make(chan agent.Event, 100)
 
 	// Start the agent in a goroutine
 	go agt.Send(ctx, prompt, events)

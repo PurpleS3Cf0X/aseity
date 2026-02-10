@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.18.4] - 2026-02-10
+
+### Fixed
+- **Headless Mode Deadlock**: Fixed critical bug where headless mode would fail with "events channel must be buffered" error, preventing tool execution.
+- **Tool Calling**: Agents can now properly call tools and return results in headless mode.
+
+---
+
 ## [2.18.3] - 2026-02-10
 
 ### Fixed
