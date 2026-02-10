@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.18.2] - 2026-02-10
+
+### Fixed
+- **Context Loss**: Fixed issue where Ollama's default 2KB context window caused the agent to forget instructions. Aseity now requests a 32KB window for Ollama models.
+- **Symbol Rendering**: Fixed broken HTML entity rendering (e.g., `&#61594;`) in web search results.
+- **Thoughts Leakage**: Fixed `<think>` tags leaking into the chat window from reasoning models.
+
+---
+
 ## [2.18.1] - 2026-02-10
 
 ### Fixed

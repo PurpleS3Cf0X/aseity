@@ -101,6 +101,12 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 
 	conv.AddSystem(systemPrompt)
 
+	// CRITICAL: Set the conversation context limit to match the model's capabilities.
+	// This ensures the compaction logic kicks in BEFORE the provider truncates history.
+	if profile.MaxTokens > 0 {
+		conv.SetMaxTokens(profile.MaxTokens)
+	}
+
 	return &Agent{
 		prov:       prov,
 		tools:      registry,
@@ -136,6 +142,11 @@ func NewWithConversation(prov provider.Provider, registry *tools.Registry, conv 
 	} else {
 		// Fallback to detection
 		profile = skillsets.DetectModelProfile(modelName)
+	}
+
+	// CRITICAL: Update the conversation context limit if we are attaching to an existing one.
+	if profile.MaxTokens > 0 {
+		conv.SetMaxTokens(profile.MaxTokens)
 	}
 
 	return &Agent{

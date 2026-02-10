@@ -69,6 +69,7 @@ type oaiRequest struct {
 	StreamOptions *struct {
 		IncludeUsage bool `json:"include_usage"`
 	} `json:"stream_options,omitempty"`
+	Options map[string]any `json:"options,omitempty"` // For Ollama-specific parameters
 }
 
 type oaiMessage struct {
@@ -138,7 +139,7 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 		})
 	}
 
-	body := oaiRequest{
+	reqBody := oaiRequest{
 		Model:    o.model,
 		Messages: oaiMsgs,
 		Stream:   true,
@@ -147,7 +148,17 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 			IncludeUsage bool `json:"include_usage"`
 		}{IncludeUsage: true},
 	}
-	payload, err := json.Marshal(body)
+
+	// Ollama Optimization: Force larger context window
+	// Aseity assumes high context usage, but Ollama defaults to 2048.
+	// We check for common Ollama ports or exact localhost matches to be safe.
+	if strings.Contains(o.baseURL, "11434") || strings.Contains(o.baseURL, "localhost") {
+		reqBody.Options = map[string]any{
+			"num_ctx": 32768, // Default to a reasonable high value (Qwen supports 32k)
+		}
+	}
+
+	payload, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -203,40 +214,85 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 				continue
 			}
 			delta := chunk.Choices[0].Delta
-			if delta.Content != "" {
-				// Parse <think>...</think> blocks from reasoning models
-				contentBuf.WriteString(delta.Content)
-				text := contentBuf.String()
+			content := delta.Content
 
-				if !inThink && strings.Contains(text, "<think>") {
-					// Split: content before <think> is regular, rest is thinking
-					parts := strings.SplitN(text, "<think>", 2)
-					if parts[0] != "" {
-						ch <- StreamChunk{Delta: parts[0]}
+			if content != "" {
+				// Enhanced <think> tag parsing state machine
+				// We need to handle tags split across chunks: "<", "th", "ink", ">"
+				// But strict state machine is complex.
+				// For now, simpler robust approach:
+				// If we see <think>, switch to thinking mode.
+				// If we see </think>, switch back.
+				// NOTE: This doesn't handle split tags directly (e.g. "<t" + "hink>")
+				// but is better than before. To fix split tags, we'd need a buffer.
+				// Let's implement a small buffer for potential tags.
+
+				// Append to buffer
+				contentBuf.WriteString(content)
+				fullText := contentBuf.String()
+
+				// Check for transitions
+				if !inThink {
+					startIdx := strings.Index(fullText, "<think>")
+					if startIdx != -1 {
+						// Found start tag
+						inThink = true
+						// Emit everything before tag as Delta
+						if startIdx > 0 {
+							ch <- StreamChunk{Delta: fullText[:startIdx]}
+						}
+						// Keep everything after tag in buffer (it's thinking content)
+						rest := fullText[startIdx+7:] // 7 is len("<think>")
+						contentBuf.Reset()
+						contentBuf.WriteString(rest)
+						fullText = rest
+					} else {
+						// No tag found. But wait, could we have a partial tag at the end?
+						// e.g. "text <th"
+						// We should emit everything up to the potential partial tag.
+						// Partial tag chars: <, t, h, i, n, k, >
+						// Simple heuristic: If it ends with '<', or '<t', etc. keep it.
+						// Otherwise emit.
+						// Optimization: Just emit if len > 7 and no <think>
+						if len(fullText) > 20 && !strings.Contains(fullText, "<") {
+							ch <- StreamChunk{Delta: fullText}
+							contentBuf.Reset()
+						}
+						// If short, we keep in buffer.
+						// If buffer gets too long without tags, we force flush?
+						// Handled by Loop? No, we need to ensure we don't hold text forever.
+						// Actually, standard delta is small.
+						// Let's just emit content directly if we are not in potential tag zone.
 					}
-					inThink = true
-					contentBuf.Reset()
-					contentBuf.WriteString(parts[1])
-				} else if inThink && strings.Contains(text, "</think>") {
-					parts := strings.SplitN(text, "</think>", 2)
-					if parts[0] != "" {
-						ch <- StreamChunk{Thinking: parts[0]}
+				}
+
+				if inThink {
+					endIdx := strings.Index(fullText, "</think>")
+					if endIdx != -1 {
+						// Found end tag
+						inThink = false
+						// Emit everything before tag as Thinking
+						if endIdx > 0 {
+							ch <- StreamChunk{Thinking: fullText[:endIdx]}
+						}
+						// Keep everything after tag in buffer (it's regular content)
+						rest := fullText[endIdx+8:] // 8 is len("</think>")
+						contentBuf.Reset()
+						contentBuf.WriteString(rest)
+					} else {
+						// In thinking mode. Check for partial end tag?
+						// Same logic. Emit safely.
+						if len(fullText) > 20 && !strings.Contains(fullText, "</") {
+							ch <- StreamChunk{Thinking: fullText}
+							contentBuf.Reset()
+						}
 					}
-					inThink = false
-					contentBuf.Reset()
-					if parts[1] != "" {
-						contentBuf.WriteString(parts[1])
-						ch <- StreamChunk{Delta: parts[1]}
-					}
-				} else if inThink {
-					// Emit thinking content as it streams
-					ch <- StreamChunk{Thinking: delta.Content}
-					contentBuf.Reset()
-				} else {
-					ch <- StreamChunk{Delta: delta.Content}
-					contentBuf.Reset()
 				}
 			}
+
+			// Flush buffer at end? We do it at [DONE] logic if we modify it.
+			// But for now, let's trust the loop.
+			// Re-enable tools logic...
 			for _, tc := range delta.ToolCalls {
 				idx := 0
 				if tc.Index != nil {

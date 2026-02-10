@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"html"
 	"math/rand"
 	"os/exec"
 	"strings"
@@ -1073,6 +1074,8 @@ func (m *Model) rebuildView() {
 // --- Block Rendering Helpers ---
 
 func (m *Model) renderUserBlock(content string) string {
+	// Unescape HTML entities (e.g. &#61594; -> symbol)
+	content = html.UnescapeString(content)
 	return UserBlockStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
 			RoleHeaderStyle.Foreground(BrightGreen).Render("USER"),
@@ -1109,6 +1112,9 @@ func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) stri
 		// Let's just render content.
 		body = AssistantMsgStyle.Render(contentToRender)
 	} else {
+		// Unescape HTML entities before markdown
+		contentToRender = html.UnescapeString(contentToRender)
+
 		// Render markdown
 		rendered, err := m.renderer.Render(contentToRender)
 		if err != nil {
@@ -1181,11 +1187,16 @@ func (m *Model) renderToolBlock(header, result string) string {
 
 	// Ensure header is clean
 	header = strings.TrimSpace(header)
+	// Unescape header just in case
+	header = html.UnescapeString(header)
 
 	var content string
 	if result != "" {
 		// Clean result
 		result = strings.TrimSpace(result)
+		// Unescape result content
+		result = html.UnescapeString(result)
+
 		if len(result) > 500 {
 			result = result[:500] + "\n... (truncated)"
 		}
