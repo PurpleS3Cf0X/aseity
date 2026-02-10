@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.17.0] - 2026-02-10
+
+### Added
+- **Recursive Hierarchical Agents**: Support for complex task decomposition
+  - **New Tool**: `wait_all_agents` allows the root agent to synchronize multiple background sub-agents
+  - **Structured Spawning**: `spawn_agent` now enforces structured status reporting for better coordination
+  - **Parallel Execution**: Sub-agents run efficiently in parallel, enabling faster completion of multi-file tasks
+
+### Technical Details
+- Implemented "Planner -> Worker" architecture
+- Added `TestRecursiveAgentSpawning` integration test
+- Refactored agent event loop to support aggregated child results
+
+---
+
 ## [2.16.0] - 2026-02-05
 
 ### Added
