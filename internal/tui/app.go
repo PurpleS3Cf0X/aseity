@@ -165,8 +165,21 @@ type Model struct {
 }
 
 type chatMessage struct {
-	role    string
-	content string
+	role     string
+	content  string
+	rendered string // Caches the markdown rendering to avoid re-rendering entire history on every frame
+}
+
+// setRendered updates content and clears cache if needed
+func (c *chatMessage) setContent(content string) {
+	c.content = content
+	c.rendered = ""
+}
+
+// appendContent appends text and clears cache
+func (c *chatMessage) appendContent(text string) {
+	c.content += text
+	c.rendered = ""
 }
 
 func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation, qualityGate bool) Model {
@@ -485,7 +498,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.messages) == 0 || m.messages[len(m.messages)-1].role != "thinking" {
 				m.messages = append(m.messages, chatMessage{role: "thinking"})
 			}
-			m.messages[len(m.messages)-1].content += evt.Text
+			m.messages[len(m.messages)-1].appendContent(evt.Text)
 
 		case agent.EventDelta:
 			// Provider is responding, so it's online
@@ -493,7 +506,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.messages) == 0 || m.messages[len(m.messages)-1].role != "assistant" {
 				m.messages = append(m.messages, chatMessage{role: "assistant", content: evt.Text})
 			} else {
-				m.messages[len(m.messages)-1].content += evt.Text
+				m.messages[len(m.messages)-1].appendContent(evt.Text)
 			}
 			m.rebuildView()
 
@@ -509,7 +522,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case agent.EventToolOutput:
 			// Append output to the last message if it's a tool execution display
 			if len(m.messages) > 0 && m.messages[len(m.messages)-1].role == "tool" {
-				m.messages[len(m.messages)-1].content += evt.Text
+				m.messages[len(m.messages)-1].appendContent(evt.Text)
 			} else {
 				// Should not happen, but safe fallback
 				m.messages = append(m.messages, chatMessage{role: "tool", content: evt.Text})
@@ -610,7 +623,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if usageText != "" && len(m.messages) > 0 {
 				for i := len(m.messages) - 1; i >= 0; i-- {
 					if m.messages[i].role == "assistant" {
-						m.messages[i].content += usageText
+						m.messages[i].appendContent(usageText)
 						break
 					}
 				}
@@ -942,55 +955,91 @@ func (m *Model) rebuildView() {
 
 	// Iterate with index to allow lookahead/grouping
 	for i := 0; i < len(m.messages); i++ {
-		msg := m.messages[i]
+		// Use pointer to update cache in place
+		msg := &m.messages[i]
+
+		// Check if we have a cached rendering and no special conditions (like grouping)
+		// We only cache "final" looking blocks. Tool blocks with results are tricky due to lookahead.
+		// For now, let's cache everything that is self-contained.
+
+		// If cached, use it
+		// NOTE: Tool blocks that depend on next message (result) cannot be easily cached
+		// if we handle looking ahead here.
+		// Simplification: We only cache Assistant, User, System, Error messages.
+		// Tools logic is complex with grouping.
+
+		if msg.rendered != "" {
+			sb.WriteString(msg.rendered)
+			continue
+		}
+
+		var renderedBlock string
 
 		switch msg.role {
 		case "welcome":
-			// Welcome message
-			sb.WriteString(m.renderAssistantBlock("Aseity", msg.content, true))
+			renderedBlock = m.renderAssistantBlock("Aseity", msg.content, true)
 
 		case "user":
-			sb.WriteString(m.renderUserBlock(msg.content))
+			renderedBlock = m.renderUserBlock(msg.content)
 
 		case "thinking":
-			sb.WriteString(m.renderThinkingBlock(msg.content))
+			renderedBlock = m.renderThinkingBlock(msg.content)
 
 		case "assistant":
-			sb.WriteString(m.renderAssistantBlock("Aseity", msg.content, false))
+			renderedBlock = m.renderAssistantBlock("Aseity", msg.content, false)
 
 		case "tool":
 			// Group tool call with its result if the next message is a result
 			var result string
 			if i+1 < len(m.messages) && m.messages[i+1].role == "tool_result" {
 				result = m.messages[i+1].content
+				// We do NOT cache the parent tool message if we are skipping the next one,
+				// because the cache logic operates on per-message index.
+				// If we cache this combined block on message[i], we must also ensure message[i+1] isn't rendered or cached separately.
+				// This loop skips i+1 manually.
+				// So if we cache message[i], we must know to skip i+1 next time too.
+				// But rebuildView logic assumes sequential execution.
+				// If we cache, next time we hit i, we start loop i+1.
+				// Wait, if we use cache, we just append string and continue loop.
+				// We need to mark i+1 as "consumed" or just check logic again?
+				// To keep it safe, WE DO NOT CACHE grouped tools for now.
 				i++ // Skip next message
 			}
-			// If result is empty, it might be running or just no output?
-			// msg.content contains the formatted header from formatToolCallDisplay
-			sb.WriteString(m.renderToolBlock(msg.content, result))
+			renderedBlock = m.renderToolBlock(msg.content, result)
 
 		case "tool_result":
 			// Orphaned result (shouldn't happen often if grouped above)
-			sb.WriteString(m.renderToolBlock("Previous Tool", msg.content))
+			renderedBlock = m.renderToolBlock("Previous Tool", msg.content)
 
 		case "confirm_prompt":
-			sb.WriteString(WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n\n")
+			renderedBlock = WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n\n"
 
 		case "confirm":
-			sb.WriteString(SuccessStyle.Render("  ✓ "+msg.content) + "\n\n")
+			renderedBlock = SuccessStyle.Render("  ✓ "+msg.content) + "\n\n"
 
 		case "confirm_deny":
-			sb.WriteString(ErrorStyle.Render("  ✗ "+msg.content) + "\n\n")
+			renderedBlock = ErrorStyle.Render("  ✗ "+msg.content) + "\n\n"
 
 		case "system":
-			sb.WriteString(SystemMsgStyle.Render("  ℹ "+msg.content) + "\n\n")
+			renderedBlock = SystemMsgStyle.Render("  ℹ "+msg.content) + "\n\n"
 
 		case "error":
-			sb.WriteString(ErrorStyle.Render("  ✗ Error: "+msg.content) + "\n\n")
+			renderedBlock = ErrorStyle.Render("  ✗ Error: "+msg.content) + "\n\n"
 
 		case "subagent":
-			sb.WriteString(AgentActivityStyle.Render("🤖 Agent Activity:\n"+msg.content) + "\n")
+			renderedBlock = AgentActivityStyle.Render("🤖 Agent Activity:\n"+msg.content) + "\n"
 		}
+
+		// Cache it!
+		// Only cache if it's NOT a tool block involved in grouping (complex)
+		// Or just cache it if we are sure it won't change?
+		// We cleared cache on append.
+		// Ideally we cache everything.
+		if msg.role != "tool" {
+			msg.rendered = renderedBlock
+		}
+
+		sb.WriteString(renderedBlock)
 	}
 
 	// Spinner handling
@@ -1000,25 +1049,25 @@ func (m *Model) rebuildView() {
 
 		var spinBlock string
 		if m.currentTool != "" {
-			// Tool is running
 			spinBlock = fmt.Sprintf(" %s %s", spinnerFrame, status)
 			spinBlock = ToolExecStyle.Render(spinBlock)
 		} else {
-			// Just thinking
 			spinBlock = fmt.Sprintf(" %s %s", spinnerFrame, status)
-			// Apply the current spinner style
 			spinBlock = m.spinner.Style.Render(spinBlock)
 		}
-		// Wrap in a subtle box or just margin?
-		// Let's keep it simple but aligned
 		sb.WriteString(spinBlock + "\n")
 	}
 
-	// Sticky Bottom Logic
-	// Always scroll to bottom to show latest content (including token usage)
-	// This was previously conditional (wasAtBottom) but users expect to see new responses
+	// Check if we are currently at the bottom BEFORE updating content
+	wasAtBottom := m.viewport.AtBottom()
+
 	m.viewport.SetContent(sb.String())
-	m.viewport.GotoBottom()
+
+	// Only scroll to bottom if we were already there
+	// This allows user to scroll up and read history without fighting auto-scroll
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+	}
 }
 
 // --- Block Rendering Helpers ---

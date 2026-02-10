@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.18.1] - 2026-02-10
+
+### Fixed
+- **TUI Freezing**: Implemented render caching to prevent UI freezes during heavy output
+  - Optimized markdown rendering to avoid O(N^2) re-rendering on every token
+- **Scroll Lock**: Fixed issue where auto-scroll prevented manual scrolling
+  - TUI now only auto-scrolls if the user is already at the bottom of the viewport
+
+---
+
 ## [2.18.0] - 2026-02-10
 
 ### Added
