@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -635,7 +639,7 @@ func showHelp() {
 }
 
 func cmdUpdate() {
-	fmt.Println("🔄 Updating Aseity to latest version...")
+	fmt.Println("🔄 Updating Aseity...")
 
 	// Find the executables directory
 	exePath, err := os.Executable()
@@ -649,51 +653,61 @@ func cmdUpdate() {
 		fatal("Failed to resolve symlinks: %v", err)
 	}
 
-	findGitRoot := func(startDir string) string {
-		dir := startDir
-		for {
-			if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-				return dir
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
+	// 1. Try Git Update first
+	if isGitRepo(filepath.Dir(exePath)) {
+		updateFromSource(exePath)
+		return
+	}
+
+	// 2. Fallback to Binary Update
+	updateFromBinary(exePath)
+}
+
+func isGitRepo(path string) bool {
+	// Walk up to find .git
+	dir := path
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return true
 		}
-		return ""
-	}
-
-	// Try to find .git directory by walking up from executable
-	gitRoot := findGitRoot(filepath.Dir(exePath))
-
-	// If not found, try current working directory
-	if gitRoot == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			gitRoot = findGitRoot(cwd)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
 		}
+		dir = parent
+	}
+	return false
+}
+
+func updateFromSource(exePath string) {
+	fmt.Println("📂 Detected source installation (git).")
+
+	// Find git root
+	gitRoot := ""
+	dir := filepath.Dir(exePath)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			gitRoot = dir
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
 	if gitRoot == "" {
-		fatal("Could not locate .git directory from %s or current directory.\nCannot update installed binary without git repository.", exePath)
+		fatal("Git repository not found despite detection.")
 	}
 
-	// Change to git root
 	if err := os.Chdir(gitRoot); err != nil {
 		fatal("Failed to change to git directory: %v", err)
 	}
-	fmt.Printf("📂 Found repository at: %s\n", gitRoot)
 
-	// Get current version
-	currentVersion := version.Version
-	fmt.Printf("Current version: %s\n", currentVersion)
-
-	// Check for uncommitted changes
+	// Check status
 	cmd := exec.Command("git", "status", "--porcelain")
-	output, err := cmd.Output()
-	if err != nil {
-		fatal("Failed to check git status: %v", err)
-	}
+	output, _ := cmd.Output()
 	if len(output) > 0 {
 		fmt.Println("⚠️  Warning: You have uncommitted changes.")
 		fmt.Print("Continue anyway? (y/N): ")
@@ -701,48 +715,138 @@ func cmdUpdate() {
 		fmt.Scanln(&response)
 		if strings.ToLower(response) != "y" {
 			fmt.Println("Update cancelled.")
-			return
+			os.Exit(0)
 		}
 	}
 
-	// Pull latest changes
 	fmt.Println("📥 Pulling latest changes...")
 	cmd = exec.Command("git", "pull", "origin", "master")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fatal("Failed to pull latest changes: %v", err)
+		fatal("Failed to pull: %v", err)
 	}
 
-	// Rebuild binary
 	fmt.Printf("🔨 Rebuilding binary to %s...\n", exePath)
-
-	// We build directly to the executable path to update the installed version
 	cmd = exec.Command("go", "build", "-v", "-o", exePath, "./cmd/aseity")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		// If that fails (e.g. permissions), fall back to local bin
-		fmt.Printf("⚠️  Failed to overwrite %s: %v\n", exePath, err)
-		fallbackPath := filepath.Join(gitRoot, "bin", "aseity")
-		fmt.Printf("🔨 Trying fallback build to %s...\n", fallbackPath)
-		cmd = exec.Command("go", "build", "-v", "-o", fallbackPath, "./cmd/aseity")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fatal("Failed to rebuild binary: %v", err)
-		}
-		exePath = fallbackPath
+		fatal("Build failed: %v", err)
 	}
 
-	// Get new version
-	cmd = exec.Command(exePath, "--version")
-	output, err = cmd.Output()
+	printNewVersion(exePath)
+}
+
+func updateFromBinary(exePath string) {
+	fmt.Println("📦 Detected binary installation.")
+	fmt.Println("🔎 Checking for latest release on GitHub...")
+
+	// Get latest release tag
+	resp, err := http.Get("https://api.github.com/repos/PurpleS3Cf0X/aseity/releases/latest")
 	if err != nil {
-		fmt.Printf("⚠️  Build succeeded but could not run new binary at %s: %v\n", exePath, err)
-	} else {
-		fmt.Println("✅ Update complete!")
-		fmt.Printf("New version: %s", string(output))
+		fatal("Failed to fetch latest release: %v", err)
 	}
-	fmt.Println("\nRestart Aseity to use the new version.")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		fatal("Failed to fetch release info (HTTP %d)", resp.StatusCode)
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		HtmlUrl string `json:"html_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		fatal("Failed to parse release info: %v", err)
+	}
+
+	if release.TagName == "v"+version.Version || release.TagName == version.Version {
+		fmt.Printf("✅ You are already on the latest version (%s)\n", release.TagName)
+		os.Exit(0)
+	}
+
+	fmt.Printf("⬇️  Found new version: %s\n", release.TagName)
+
+	// Determine arch
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	downloadUrl := fmt.Sprintf("https://github.com/PurpleS3Cf0X/aseity/releases/download/%s/aseity-%s-%s", release.TagName, goos, goarch)
+
+	fmt.Printf("📥 Downloading from %s...\n", downloadUrl)
+
+	// Create temp file
+	tmpFile, err := os.CreateTemp("", "aseity-update-*")
+	if err != nil {
+		fatal("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Download
+	dResp, err := http.Get(downloadUrl)
+	if err != nil {
+		fatal("Download failed: %v", err)
+	}
+	defer dResp.Body.Close()
+
+	if dResp.StatusCode != 200 {
+		fatal("Download failed (HTTP %d)", dResp.StatusCode)
+	}
+
+	// Progress bar
+	size := dResp.ContentLength
+	counter := &writeCounter{Total: uint64(size)}
+	if _, err := io.Copy(tmpFile, io.TeeReader(dResp.Body, counter)); err != nil {
+		fatal("Failed to write binary: %v", err)
+	}
+	tmpFile.Close()
+	fmt.Println()
+
+	if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
+		fatal("Failed to make executable: %v", err)
+	}
+
+	// Replace executable
+	if err := os.Rename(tmpFile.Name(), exePath); err != nil {
+		// If rename fails (cross-device usually), try copy
+		// Or permission error?
+		fmt.Printf("⚠️  Direct move failed (%v), trying copy...\n", err)
+		// We'll instruct user if permission denied
+		if strings.Contains(err.Error(), "permission denied") {
+			fatal("Permission denied. Try running with sudo:\n  sudo aseity --update")
+		}
+
+		// Manual copy fallback
+		input, err := os.ReadFile(tmpFile.Name())
+		if err != nil {
+			fatal("Read temp failed: %v", err)
+		}
+		if err := os.WriteFile(exePath, input, 0755); err != nil {
+			fatal("Failed to overwrite %s: %v", exePath, err)
+		}
+	}
+
+	printNewVersion(exePath)
+}
+
+func printNewVersion(path string) {
+	fmt.Println("✅ Update complete!")
+	cmd := exec.Command(path, "--version")
+	output, _ := cmd.Output()
+	fmt.Printf("New version: %s", string(output))
+	fmt.Println("Restart Aseity to use the new version.")
+}
+
+type writeCounter struct {
+	Total      uint64
+	Downloaded uint64
+}
+
+func (wc *writeCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.Downloaded += uint64(n)
+	pct := float64(wc.Downloaded) / float64(wc.Total) * 100
+	fmt.Printf("\rDownloading... %.1f%%", pct)
+	return n, nil
 }
