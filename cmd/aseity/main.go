@@ -38,6 +38,7 @@ func main() {
 	headlessFlag := flag.Bool("headless", false, "Run in headless mode (no TUI)")
 	sessionFlag := flag.String("session", "", "Load a previous session (by ID or file path)")
 	qualityGateFlag := flag.Bool("quality-gate", false, "Enable automated Quality Gate (Judge/Critic loop)")
+	loadModelFlag := flag.String("load-model", "", "Load a GGUF model file into Ollama")
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -53,6 +54,13 @@ func main() {
 
 	if *updateFlag {
 		cmdUpdate()
+		os.Exit(0)
+	}
+
+	if *loadModelFlag != "" {
+		if err := setup.LoadModel(*loadModelFlag); err != nil {
+			fatal("Failed to load model: %v", err)
+		}
 		os.Exit(0)
 	}
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.18.0] - 2026-02-10
+
+### Added
+- **Custom Model Loading**: Easily load local GGUF models into Ollama
+  - New command: `aseity --load-model <path/to/model.gguf>`
+  - Automatically creates a Modelfile and registers the model in Ollama
+  - Streamlines the workflow for using fine-tuned models
+
+---
+
 ## [2.17.0] - 2026-02-10
 
 ### Added

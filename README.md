@@ -151,6 +151,9 @@ aseity search "code assistant"
 
 # Remove a model
 aseity remove llama2
+
+# Load a custom model (GGUF)
+aseity --load-model ./my-finetuned-model.gguf
 ```
 
 ### Diagnostics

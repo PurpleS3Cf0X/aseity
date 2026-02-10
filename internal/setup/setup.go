@@ -274,6 +274,72 @@ func PullModel(model string) error {
 	return fmt.Errorf("model pull completed but model not available after 15 seconds")
 }
 
+// OllamaBaseURL is exposed for testing
+var OllamaBaseURL = "http://localhost:11434"
+
+func LoadModel(ggufPath string) error {
+	absPath, err := filepath.Abs(ggufPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %v", err)
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		return fmt.Errorf("file not found: %s", absPath)
+	}
+
+	modelName := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+	step(fmt.Sprintf("Loading custom model '%s' from %s...", modelName, absPath))
+
+	// Creating a temporary Modelfile
+	modelfileContent := fmt.Sprintf("FROM %s\n", absPath)
+	payload := fmt.Sprintf(`{"name":"%s", "modelfile":%q}`, modelName, modelfileContent)
+
+	info("Sending create request to Ollama...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	url := fmt.Sprintf("%s/api/create", OllamaBaseURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ollama: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create failed (HTTP %d): %s", resp.StatusCode, string(b))
+	}
+
+	// Stream progress
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		var progress struct {
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &progress) == nil {
+			if progress.Status != "" {
+				fmt.Printf("\r  %s%-60s%s", dim, progress.Status, reset)
+			}
+		}
+	}
+	fmt.Println()
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("stream error: %v", err)
+	}
+
+	success(fmt.Sprintf("Model '%s' created successfully!", modelName))
+	info(fmt.Sprintf("You can now use it with: aseity --model %s", modelName))
+	return nil
+}
+
 func StartDockerOllama() error {
 	step("Starting Ollama via Docker Compose...")
 
