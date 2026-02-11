@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -176,6 +177,47 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 	if err != nil {
 		return nil, err
 	}
+
+	// SPECIAL HANDLING: Ollama returns error if we send tools to a model that doesn't support them.
+	if resp.StatusCode != 200 && len(oaiTools) > 0 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		errMsg := string(body)
+		errMsgLower := strings.ToLower(errMsg)
+
+		// Check for variants of "does not support tools"
+		// Case insensitive check covers "does not support tools", "tool use is not supported" etc.
+		if strings.Contains(errMsgLower, "does not support tools") ||
+			strings.Contains(errMsgLower, "does not support functions") ||
+			strings.Contains(errMsgLower, "tool use is not supported") {
+
+			// Notify user in TUI (via stderr)
+			fmt.Fprintf(os.Stderr, "\r\n(Auto-Fix) Model does not support tools. Retrying in chat-only mode...\r\n")
+
+			// Retry without tools
+			reqBody.Tools = nil
+			payload, _ = json.Marshal(reqBody)
+
+			req, err = http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewReader(payload))
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			if o.apiKey != "" {
+				req.Header.Set("Authorization", "Bearer "+o.apiKey)
+			}
+
+			// Retry the request
+			resp, err = o.client.Do(req)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// Restore body for regular error handling
+			resp.Body = io.NopCloser(strings.NewReader(errMsg))
+		}
+	}
+
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
