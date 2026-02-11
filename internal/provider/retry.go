@@ -46,7 +46,8 @@ func (r *RetryProvider) Models(ctx context.Context) ([]string, error) {
 
 func (r *RetryProvider) Chat(ctx context.Context, msgs []Message, tools []ToolDef) (<-chan StreamChunk, error) {
 	var lastErr error
-	for attempt := 0; attempt <= r.maxRetries; attempt++ {
+	var attempt int
+	for attempt = 0; attempt <= r.maxRetries; attempt++ {
 		ch, err := r.inner.Chat(ctx, msgs, tools)
 		if err == nil {
 			return ch, nil
@@ -59,7 +60,7 @@ func (r *RetryProvider) Chat(ctx context.Context, msgs []Message, tools []ToolDe
 			return nil, lastErr
 		}
 	}
-	return nil, fmt.Errorf("after %d retries: %w", r.maxRetries, lastErr)
+	return nil, fmt.Errorf("after %d retries: %w", attempt, lastErr)
 }
 
 func (r *RetryProvider) isRetryable(err error) bool {
