@@ -187,8 +187,8 @@ func (o *Orchestrator) executePlan(ctx context.Context, plan *Plan) ([]StepResul
 
 		start := time.Now()
 
-		// Execute the tool directly
-		result, err := o.executeStep(ctx, step)
+		// Execute the tool with previous results for parameter extraction
+		result, err := o.executeStep(ctx, step, results[:i])
 
 		duration := time.Since(start).Milliseconds()
 
@@ -215,9 +215,12 @@ func (o *Orchestrator) executePlan(ctx context.Context, plan *Plan) ([]StepResul
 	return results, nil
 }
 
-func (o *Orchestrator) executeStep(ctx context.Context, step PlanStep) (string, error) {
+func (o *Orchestrator) executeStep(ctx context.Context, step PlanStep, previousResults []StepResult) (string, error) {
+	// Extract dynamic parameters from previous results
+	params := extractDynamicParams(step.Parameters, previousResults)
+
 	// Convert parameters to JSON string
-	paramsJSON, err := marshalParams(step.Parameters)
+	paramsJSON, err := marshalParams(params)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal parameters: %w", err)
 	}
