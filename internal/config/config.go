@@ -15,9 +15,19 @@ type Config struct {
 	DefaultModel    string                    `yaml:"default_model"`
 	Providers       map[string]ProviderConfig `yaml:"providers"`
 	Tools           ToolsConfig               `yaml:"tools"`
+	Orchestrator    OrchestratorConfig        `yaml:"orchestrator"`
 	Theme           string                    `yaml:"theme"`
 	MaxTurns        int                       `yaml:"max_turns"`
 	MaxTokens       int                       `yaml:"max_tokens"`
+}
+
+type OrchestratorConfig struct {
+	Enabled      bool `yaml:"enabled"`
+	AutoDetect   bool `yaml:"auto_detect"`
+	Parallel     bool `yaml:"parallel"`
+	MaxRetries   int  `yaml:"max_retries"`
+	MaxSteps     int  `yaml:"max_steps"`
+	ShowProgress bool `yaml:"show_progress"`
 }
 
 type ProviderConfig struct {

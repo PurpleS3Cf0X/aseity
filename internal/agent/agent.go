@@ -60,6 +60,30 @@ type Agent struct {
 	// Skillset framework
 	profile    skillsets.ModelProfile // Model capabilities and configuration
 	userConfig *skillsets.UserConfig  // User-defined skillsets and configurations
+
+	// Orchestrator integration
+	orchestrator       interface{} // *orchestrator.Orchestrator (avoid import cycle)
+	orchestratorConfig OrchestratorConfig
+	ProgressCh         chan OrchestratorProgress // Send progress updates to TUI
+}
+
+// OrchestratorConfig holds orchestrator settings
+type OrchestratorConfig struct {
+	Enabled      bool
+	AutoDetect   bool
+	Parallel     bool
+	MaxRetries   int
+	MaxSteps     int
+	ShowProgress bool
+}
+
+// OrchestratorProgress represents orchestrator execution state
+type OrchestratorProgress struct {
+	Mode        string
+	Plan        interface{} // *orchestrator.Plan
+	StepResults interface{} // []orchestrator.StepResult
+	CurrentStep int
+	Message     string
 }
 
 func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) *Agent {
@@ -189,6 +213,36 @@ func (a *Agent) Send(ctx context.Context, userMsg string, events chan<- Event) {
 		return
 	}
 
+	// Check if we should use orchestrator
+	if a.ShouldUseOrchestrator(userMsg) {
+		events <- Event{
+			Type: EventThinking,
+			Text: "🤖 Using orchestrator mode for this query...",
+		}
+
+		response, err := a.ProcessWithOrchestrator(ctx, userMsg)
+		if err != nil {
+			events <- Event{
+				Type:  EventError,
+				Error: fmt.Sprintf("Orchestrator failed: %v", err),
+				Done:  true,
+			}
+			return
+		}
+
+		// Send response
+		events <- Event{
+			Type: EventDelta,
+			Text: response,
+		}
+		events <- Event{
+			Type: EventDone,
+			Done: true,
+		}
+		return
+	}
+
+	// Normal agent flow
 	if a.OriginalGoal == "" {
 		a.OriginalGoal = userMsg
 	}

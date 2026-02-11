@@ -32,9 +32,8 @@ providers:
     api_key: $HF_TOKEN
 
 tools:
-  auto_approve:
-    - file_read
-    - file_search
+  auto_approve: []
+  # Example: auto_approve: ["bash", "file_read"]
   allowed_commands:
     - git
     - go
@@ -43,3 +42,12 @@ tools:
     - python
     - cargo
     - docker
+
+# Orchestrator configuration (experimental)
+orchestrator:
+  enabled: true           # Enable orchestrator integration
+  auto_detect: true       # Automatically use orchestrator for complex queries
+  parallel: false         # Enable parallel execution
+  max_retries: 3          # Maximum retry attempts
+  max_steps: 10           # Maximum steps per query
+  show_progress: true     # Show execution progress in TUI
