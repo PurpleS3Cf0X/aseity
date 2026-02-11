@@ -563,19 +563,6 @@ func launchTUI(cfg *config.Config, provName, modelName string, allowAll bool, in
 		}
 	}
 
-	// Initialize orchestrator if enabled
-	var orchConfig *agent.OrchestratorConfig
-	if cfg.Orchestrator.Enabled {
-		orchConfig = &agent.OrchestratorConfig{
-			Enabled:      cfg.Orchestrator.Enabled,
-			AutoDetect:   cfg.Orchestrator.AutoDetect,
-			Parallel:     cfg.Orchestrator.Parallel,
-			MaxRetries:   cfg.Orchestrator.MaxRetries,
-			MaxSteps:     cfg.Orchestrator.MaxSteps,
-			ShowProgress: cfg.Orchestrator.ShowProgress,
-		}
-	}
-
 	m := tui.NewModel(prov, toolReg, provName, modelName, conv, qualityGate)
 
 	// Create program with appropriate options based on terminal capabilities
