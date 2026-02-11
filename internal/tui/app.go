@@ -233,7 +233,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	sysPrompt := agent.BuildSystemPrompt()
 
 	if conversation != nil {
-		ag = agent.NewFromConversation(prov, toolReg, conversation)
+		ag = agent.NewWithConversation(prov, toolReg, conversation)
 		// Rehydrate messages from conversation
 		for _, msg := range conversation.Messages() {
 			switch msg.Role {
