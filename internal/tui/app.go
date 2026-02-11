@@ -6,6 +6,7 @@ import (
 	"html"
 	"math/rand"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,6 +24,9 @@ import (
 
 // Custom spinner frames for different states
 var (
+	// Regex to strip internal tool calls from display
+	visualToolRegex = regexp.MustCompile(`\[TOOL:\w+\|.+?\]`)
+
 	// Thinking spinner — Braille dots animation (smooth)
 	ThinkingSpinner = spinner.Spinner{
 		Frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
@@ -1092,6 +1096,10 @@ func (m *Model) renderUserBlock(content string) string {
 }
 
 func (m *Model) renderAssistantBlock(title, content string, isWelcome bool) string {
+	// Clean internal tool calls from display
+	content = visualToolRegex.ReplaceAllString(content, "")
+	content = strings.TrimSpace(content)
+
 	// Extract token usage if present
 	var usageLine string
 	contentToRender := content
