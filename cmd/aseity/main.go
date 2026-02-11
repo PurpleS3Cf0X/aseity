@@ -593,7 +593,8 @@ func isTerminal() bool {
 }
 
 func fatal(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, tui.ErrorStyle.Render("error: "+fmt.Sprintf(format, args...))+"\n")
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintln(os.Stderr, tui.ErrorStyle.Render("error: "+msg))
 	os.Exit(1)
 }
 
