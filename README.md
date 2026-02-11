@@ -136,18 +136,36 @@ Type these in the chat for quick actions:
 
 ### Model Management
 
+Aseity provides built-in commands to manage your Ollama models:
+
 ```bash
-# List local models
+# List all installed models with sizes
 aseity models
 
-# Pull a new model
+# Example output:
+#   qwen2.5:32b    32B   20.0GB
+#   llama3.2:latest  3.2B  1.9GB
+#   codellama:34b  34B   17.7GB
+
+# Pull a new model from Ollama library
 aseity pull llama3.2
 aseity pull codellama:34b
-aseity pull qwen2.5:14b  # Default model
+aseity pull qwen2.5:32b  # Recommended for better quality
 aseity pull deepseek-r1
 
-# Search HuggingFace for models
+# Remove a model to free up space
+aseity remove llama2:latest
+
+# Search HuggingFace for GGUF models
 aseity search "code assistant"
+aseity search "qwen"
+```
+
+**Pro Tips**:
+- Use `aseity models` to check what's installed before pulling
+- Model names should NOT include `ollama/` prefix (e.g., use `qwen2.5:32b`, not `ollama/qwen2.5:32b`)
+- Larger models (32B+) provide better quality but need more VRAM (24GB+)
+- For zero budget, use free API: `aseity --provider google --model gemini-1.5-flash`
 
 # Remove a model
 aseity remove llama2

@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.21.1] - 2026-02-11
+
+### Improved
+- **Enhanced Documentation**: Expanded model management section in README
+  - Added `aseity models` command examples with sample output
+  - Included pro tips for model naming and selection
+  - Clarified correct model name format (no `ollama/` prefix)
+  - Added free API alternative suggestions
+- **Better User Guidance**: Clear examples showing model sizes and requirements
+
+### Documentation
+- Model management commands are now more discoverable
+- Added troubleshooting tips for common model naming mistakes
+- Included hardware requirements for different model sizes
+
+---
+
 ## [2.21.0] - 2026-02-10
 
 ### Added
