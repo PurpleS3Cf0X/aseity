@@ -61,7 +61,7 @@ type PlanStep struct {
 	Action     string                 `json:"action"`
 	Parameters map[string]interface{} `json:"parameters"`
 	Reasoning  string                 `json:"reasoning"`
-	DependsOn  []int                  `json:"depends_on,omitempty"`
+	DependsOn  []int                  `json:"depends_on,omitempty"` // Step numbers this step depends on
 }
 
 // StepResult represents the output from executing a single step

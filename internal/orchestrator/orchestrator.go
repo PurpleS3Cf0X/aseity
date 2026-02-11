@@ -13,11 +13,12 @@ import (
 
 // Orchestrator coordinates the multi-agent execution
 type Orchestrator struct {
-	provider   provider.Provider
-	registry   *tools.Registry
-	maxRetries int
-	maxSteps   int
-	stateDir   string
+	provider       provider.Provider
+	registry       *tools.Registry
+	maxRetries     int
+	maxSteps       int
+	stateDir       string
+	EnableParallel bool // Enable parallel execution of independent steps
 }
 
 // Config holds orchestrator configuration
@@ -75,7 +76,14 @@ func (o *Orchestrator) ProcessQuery(ctx context.Context, query string) (string, 
 
 		// Phase 3: Execution
 		state.SetPhase("execution")
-		results, err := o.executePlan(ctx, plan)
+		var results []StepResult
+
+		if o.EnableParallel {
+			results, err = o.executePlanParallel(ctx, plan)
+		} else {
+			results, err = o.executePlan(ctx, plan)
+		}
+
 		if err != nil {
 			state.AddError(err)
 			// Check if context was cancelled
