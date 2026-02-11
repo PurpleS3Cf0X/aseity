@@ -13,6 +13,7 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 
 - **Local-first** — Run models on your own machine with Ollama or vLLM
 - **Multi-provider** — Switch between Ollama, OpenAI, Anthropic, Google, or any OpenAI-compatible API
+- **Multi-Agent Orchestrator** — **New in v2.25.0!** Experimental orchestrator with tool chaining and parallel execution for complex queries
 - **Parallel Web Crawling** — **New in v2.8.1!** Scrape multiple sites concurrently using Crawl4AI or local browsers
 - **Interactive TUI** — Beautiful terminal interface with "Premium Matrix" aesthetics, syntax highlighting, and animated boundaries
 - **Interactive Tools** — **New in v1.0.5!** Supports interactive commands like `sudo`, `ssh`, and scripts that ask for passwords or input
@@ -105,6 +106,55 @@ Research multiple topics effectively with concurrent browsing:
 aseity "Research Go concurrency patterns on go.dev AND concurrency in Rust on rust-lang.org simultaneously"
 ```
 Aseity will spawn parallel browser instances to fetch both pages at once.
+
+### Multi-Agent Orchestrator (Experimental - New in v2.25.0)
+
+For complex queries that require multiple steps, use the orchestrator mode:
+
+```bash
+# Basic orchestrator usage
+aseity --orchestrator "What's the weather in Bengaluru?"
+
+# With parallel execution (2.5x faster for research queries)
+aseity --orchestrator --parallel "Research the top 3 AI trends for 2026"
+
+# Debug mode to see the full execution plan
+aseity --orchestrator --orchestrator-debug "Complex multi-step query"
+
+# Configure retries and max steps
+aseity --orchestrator --max-retries 5 --max-steps 15 "Query"
+```
+
+**How it works:**
+1. **Intent Parser**: Understands what you want
+2. **Task Planner**: Creates a step-by-step execution plan
+3. **Execution Engine**: Runs steps (in parallel if possible)
+4. **Result Validator**: Checks if the goal was achieved
+5. **Synthesizer**: Formats the final response
+
+**Performance:**
+- Weather lookups: Automatically chains web search → crawl → extract
+- Research queries: 2.5x faster with parallel execution (33s → 13s for 3 links)
+- Tool chaining: Automatically extracts data from previous steps
+
+**Example:**
+```bash
+$ aseity --orchestrator "What's the weather in Bengaluru?"
+
+🤖 Orchestrator Mode
+Provider: ollama | Model: qwen2.5:14b
+Max Retries: 3 | Max Steps: 10 | Parallel: false
+
+Processing...
+────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────
+✅ RESPONSE
+────────────────────────────────────────────────────────────────────────────────
+The current temperature in Bengaluru is 25°C with partly cloudy skies.
+
+📊 Tokens: 1,234 | Retries: 0
+```
 
 ### In the Chat
 

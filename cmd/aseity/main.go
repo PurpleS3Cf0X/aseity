@@ -43,6 +43,14 @@ func main() {
 	sessionFlag := flag.String("session", "", "Load a previous session (by ID or file path)")
 	qualityGateFlag := flag.Bool("quality-gate", false, "Enable automated Quality Gate (Judge/Critic loop)")
 	loadModelFlag := flag.String("load-model", "", "Load a GGUF model file into Ollama")
+
+	// Orchestrator flags
+	orchestratorFlag := flag.Bool("orchestrator", false, "Use multi-agent orchestrator (experimental)")
+	orchestratorDebugFlag := flag.Bool("orchestrator-debug", false, "Show detailed orchestrator state")
+	maxRetriesFlag := flag.Int("max-retries", 3, "Maximum retries for orchestrator")
+	maxStepsFlag := flag.Int("max-steps", 10, "Maximum steps for orchestrator")
+	parallelFlag := flag.Bool("parallel", false, "Enable parallel execution in orchestrator")
+
 	flag.Usage = showHelp
 	flag.Parse()
 
@@ -145,6 +153,12 @@ func main() {
 		modelName = cfg.DefaultModel
 	}
 
+	// Orchestrator Mode (if enabled)
+	if *orchestratorFlag {
+		launchOrchestrator(cfg, provName, modelName, initialPrompt, *orchestratorDebugFlag, *maxRetriesFlag, *maxStepsFlag, *parallelFlag)
+		return
+	}
+
 	// Startup health check (skip in headless for speed? No, keep it for safety unless ignored)
 	// Actually for "scriptable" tools, we might want to be quiet.
 	// But let's keep it for now, TUI banners need to be suppressed in headless.
@@ -188,6 +202,7 @@ func main() {
 		// ... End TUI Health Checks
 		fmt.Println()
 
+		// TUI Mode
 		launchTUI(cfg, provName, modelName, *yesFlag, initialPrompt, *sessionFlag, *qualityGateFlag)
 	} else {
 		// Headless Mode
