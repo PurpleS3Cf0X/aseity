@@ -199,10 +199,10 @@ func StartOllama() error {
 }
 
 func PullModel(model string) error {
-	// Validate and correct model name
-	corrected, suggestion, err := ValidateModelName(model)
+	// Validate and correct model name (skip registry check for pulls)
+	corrected, suggestion, err := ValidateModelName(model, true)
 	if err != nil {
-		// Model not found
+		// Only happens for common typos that need correction
 		fail(fmt.Sprintf("Invalid model name: %s", model))
 		fmt.Println()
 		fmt.Println(suggestion)
@@ -210,7 +210,7 @@ func PullModel(model string) error {
 	}
 
 	if suggestion != "" {
-		// Model name was corrected
+		// Model name was corrected (e.g., removed ollama/ prefix)
 		warn(suggestion)
 		if !askYN(fmt.Sprintf("Use '%s' instead?", corrected), true) {
 			return fmt.Errorf("model pull cancelled")

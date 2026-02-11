@@ -49,10 +49,16 @@ var PopularModels = []struct {
 }
 
 // ValidateModelName checks if a model name is valid and suggests corrections
-func ValidateModelName(model string) (corrected string, suggestion string, err error) {
+// If skipRegistryCheck is true, only checks for common typos but doesn't fail for unknown models
+func ValidateModelName(model string, skipRegistryCheck bool) (corrected string, suggestion string, err error) {
 	// Check if it's a common incorrect name
 	if correct, ok := CommonModelMappings[model]; ok {
 		return correct, fmt.Sprintf("Did you mean '%s'? (removing 'ollama/' prefix)", correct), nil
+	}
+
+	// If skipping registry check (e.g., for pull operations), accept the model as-is
+	if skipRegistryCheck {
+		return model, "", nil
 	}
 
 	// Check if model exists in Ollama registry
