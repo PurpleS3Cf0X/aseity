@@ -29,7 +29,7 @@ func TestMenuTrigger(t *testing.T) {
 	// Setup
 	prov := mockProvider{}
 	reg := tools.NewRegistry(nil, false) // Fixed args
-	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false)
+	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false, nil)
 
 	// Ensure menu starts inactive
 	if model.menu.active {
@@ -59,7 +59,7 @@ func TestMenuTrigger(t *testing.T) {
 func TestMenuSelection(t *testing.T) {
 	prov := mockProvider{}
 	reg := tools.NewRegistry(nil, false) // Fixed args
-	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false)
+	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false, nil)
 
 	// Activate menu manually
 	model.menu.active = true
@@ -88,7 +88,7 @@ func TestMenuSelection(t *testing.T) {
 func TestInputPromptDesign(t *testing.T) {
 	prov := mockProvider{}
 	reg := tools.NewRegistry(nil, false) // Fixed args
-	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false)
+	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false, nil)
 
 	// Check View for minimal prompt "> "
 	view := model.View()
@@ -100,7 +100,7 @@ func TestInputPromptDesign(t *testing.T) {
 func TestHeaderRendering(t *testing.T) {
 	prov := mockProvider{}
 	reg := tools.NewRegistry(nil, false) // Fixed args
-	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false)
+	model := NewModel(prov, reg, "mock-provider", "mock-model", nil, false, nil)
 	model.width = 100
 	model.height = 50
 

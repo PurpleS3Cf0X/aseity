@@ -183,7 +183,7 @@ func (c *chatMessage) appendContent(text string) {
 	c.rendered = ""
 }
 
-func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation, qualityGate bool) Model {
+func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelName string, conversation *agent.Conversation, qualityGate bool, orchConfig *agent.OrchestratorConfig) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Type your message..."
 	ta.Focus()
@@ -233,7 +233,7 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 	sysPrompt := agent.BuildSystemPrompt()
 
 	if conversation != nil {
-		ag = agent.NewWithConversation(prov, toolReg, conversation)
+		ag = agent.NewFromConversation(prov, toolReg, conversation)
 		// Rehydrate messages from conversation
 		for _, msg := range conversation.Messages() {
 			switch msg.Role {
@@ -257,6 +257,13 @@ func NewModel(prov provider.Provider, toolReg *tools.Registry, provName, modelNa
 		})
 	}
 	ag.QualityGateEnabled = qualityGate
+
+	// Initialize orchestrator if config provided
+	if orchConfig != nil && orchConfig.Enabled {
+		orch := agent.CreateOrchestrator(prov, toolReg, *orchConfig)
+		ag.SetOrchestrator(orch, *orchConfig)
+	}
+
 	m.agent = ag
 
 	return m
