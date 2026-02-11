@@ -19,7 +19,7 @@ type AnthropicProvider struct {
 
 func NewAnthropic(apiKey, model string) *AnthropicProvider {
 	if model == "" {
-		model = "claude-sonnet-4-20250514"
+		model = "claude-3-5-sonnet-20240620"
 	}
 	return &AnthropicProvider{apiKey: apiKey, model: model, client: &http.Client{}}
 }
@@ -30,9 +30,9 @@ func (a *AnthropicProvider) ModelName() string { return a.model }
 
 func (a *AnthropicProvider) Models(_ context.Context) ([]string, error) {
 	return []string{
-		"claude-opus-4-20250514",
-		"claude-sonnet-4-20250514",
-		"claude-haiku-3-5-20241022",
+		"claude-3-5-sonnet-20240620",
+		"claude-3-opus-20240229",
+		"claude-3-haiku-20240307",
 	}, nil
 }
 
