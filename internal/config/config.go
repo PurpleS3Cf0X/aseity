@@ -58,7 +58,7 @@ func expandEnv(s string) string {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider: "ollama",
-		DefaultModel:    "qwen2.5:14b",
+		DefaultModel:    "glm4",
 		Theme:           "green",
 		MaxTurns:        50,
 		MaxTokens:       100000,
