@@ -192,10 +192,19 @@ func (o *OpenAIProvider) Chat(ctx context.Context, msgs []Message, tools []ToolD
 			strings.Contains(errMsgLower, "tool use is not supported") {
 
 			// Notify user in TUI (via stderr)
-			fmt.Fprintf(os.Stderr, "\r\n(Auto-Fix) Model does not support tools. Retrying in chat-only mode...\r\n")
+			fmt.Fprintf(os.Stderr, "\r\n(Auto-Fix) Native tools failed. Switching to text-based tool mode...\r\n")
 
 			// Retry without tools
 			reqBody.Tools = nil
+
+			// CRITICAL: Inject a system message to force the model to use text format
+			// This prevents models from hallucinating shell sessions when tools are removed.
+			fallbackInstruction := oaiMessage{
+				Role:    "system",
+				Content: "OPERATIONAL ALERT: Native tool calling is unavailable. You MUST use the text format `[TOOL:name|json_args]` for all actions. Do not write code to execute tools; use the tag.",
+			}
+			reqBody.Messages = append(reqBody.Messages, fallbackInstruction)
+
 			payload, _ = json.Marshal(reqBody)
 
 			req, err = http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewReader(payload))
