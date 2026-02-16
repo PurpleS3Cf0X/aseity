@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.2] - 2026-02-16
+
+### Added
+- **Validation Agent**: Implemented a security/correctness validation loop (`validator.go`) that intercepts tool calls.
+- **Hallucination Protection**: Agent now self-corrects if it attempts to access non-existent paths (e.g., `/Users/r3d0ne`) or run unsafe commands not requested by the user.
+
+---
+
 ## [3.2.1] - 2026-02-16
 
 ### Fixed

@@ -60,6 +60,8 @@ type Agent struct {
 	QualityGateEnabled bool   // Enforce strict judge check before completion
 	OriginalGoal       string // Track the initial user request for judging
 
+	validator *Validator // New Validator component
+
 	// Skillset framework
 	profile    skillsets.ModelProfile // Model capabilities and configuration
 	userConfig *skillsets.UserConfig  // User-defined skillsets and configurations
@@ -155,6 +157,7 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 		prov:           prov,
 		tools:          registry,
 		conv:           conv,
+		validator:      NewValidator(prov),
 		ConfirmCh:      make(chan bool),
 		InputCh:        make(chan string),
 		RequestCh:      make(chan struct{}),
@@ -204,6 +207,7 @@ func NewWithConversation(prov provider.Provider, registry *tools.Registry, conv 
 		prov:           prov,
 		tools:          registry,
 		conv:           conv,
+		validator:      NewValidator(prov),
 		ConfirmCh:      make(chan bool, 1),
 		InputCh:        make(chan string, 1),
 		RequestCh:      make(chan struct{}),
@@ -517,6 +521,32 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 
 			events <- Event{Type: EventDone, Done: true, Usage: usage}
 			return
+		}
+
+		// --- VALIDATION STEP ---
+		// Check for hallucinations/unsafe actions before parallel grouping
+		if a.validator != nil {
+			// Iterate over tools and check. If ANY are invalid, reject the whole block?
+			// Or allow partials? For safety, let's check sequentially.
+			validTools := make([]provider.ToolCall, 0)
+			for _, tc := range toolCalls {
+				isValid, reason := a.validator.Check(ctx, a.conv.Messages(), tc)
+				if !isValid {
+					// 🚫 REJECTED
+					rejectionMsg := fmt.Sprintf("SYSTEM: 🚫 Tool Call '%s' Rejected: %s. Please correct your plan.", tc.Name, reason)
+					a.conv.AddSystem(rejectionMsg)
+
+					events <- Event{
+						Type:     EventError,
+						Error:    fmt.Sprintf("Validation Failed: %s", reason),
+						ToolName: tc.Name,
+					}
+					// Do not add to validTools
+					continue
+				}
+				validTools = append(validTools, tc)
+			}
+			toolCalls = validTools
 		}
 
 		// --- PARALLEL EXECUTION LOGIC ---
