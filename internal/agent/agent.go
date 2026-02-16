@@ -741,6 +741,12 @@ Respond following this structure.`, tc.Name, tc.Name, a.OriginalGoal)
 				a.conv.AddSystem(reactPrompt)
 			}
 
+			// SPECIAL LOGIC: Deep Research Enforcement
+			if tc.Name == "web_search" {
+				deepResearchHint := fmt.Sprintf("CRITICAL: Search completed. \n1. DO NOT use bash to process these results.\n2. You MUST use %sweb_crawl%s on the top 2-3 links to extract the full content.\n3. Do NOT answer based on snippets.", "`", "`")
+				a.conv.AddSystem(deepResearchHint)
+			}
+
 			events <- Event{
 				Type:     EventToolResult,
 				ToolID:   tc.ID,

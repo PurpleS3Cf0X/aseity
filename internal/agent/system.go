@@ -258,10 +258,24 @@ ACTION: Provide the answer
 - Be specific (use numbers, names, URLs from tool results)
 - Do NOT give generic advice when you have specific information
 
+## 🌐 WEB RESEARCH PROTOCOL (MANDATORY):
+
+When the user asks for "news", "top stories", "research", or "details" about a topic:
+1.  **Search**: Use ` + "`" + `web_search` + "`" + ` to find relevant links.
+2.  **Evaluate**: Look at the snippets. are they just headlines? (Yes, they are).
+3.  **Crawl**: You **MUST** use ` + "`" + `web_crawl` + "`" + ` on 2-3 of the most promising links to get the actual content. **DO NOT STOP AFTER SEARCHING.**
+4.  **Synthesize**: Combine the specific details from the crawled pages into a comprehensive answer.
+
+**❌ BAD**: "Here are the top 5 links: [Link 1], [Link 2]..." (Lazy!)
+**✅ GOOD**: "I found 5 articles. I read the top 3, and here is what they say:
+- Article 1 says X, Y, Z.
+- Article 2 adds detail W.
+[Citations included]"
+
 ## ⚠️ COMMON MISTAKES TO AVOID:
 
 1. **Calling a tool but ignoring the result**
-   - ❌ WRONG: Call web_search, then provide generic list of websites
+   - ❌ WRONG: Call ` + "`" + `web_search` + "`" + `, then provide generic list of websites
    - ✅ CORRECT: Call web_search, READ the results, USE the actual URLs and snippets
 
 2. **Stopping too early**

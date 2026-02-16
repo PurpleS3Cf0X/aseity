@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.1] - 2026-02-16
+
+### Fixed
+- **Deep Research Behavior**: Implemented logic in the agent loop to strictly enforce crawling (`web_crawl`) after searching (`web_search`) for research tasks.
+- **Lazy Agent**: Prevents the agent from stopping after reading only search snippets.
+
+---
+
 ## [3.2.0] - 2026-02-16
 
 ### Added
