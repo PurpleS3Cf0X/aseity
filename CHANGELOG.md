@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.1.1] - 2026-02-16
+
+### Fixed
+- **General Intent Hallucination**: Fixed an issue where conversational inputs (e.g., "hi") triggered unnecessary tool calls (like `docker info`) on ReAct-enabled models.
+  - Updated ReAct prompt to explicitly allow text-only responses.
+  - Added conversational examples to the system prompt.
+- **Documentation**: Updated README to reflect the new default model `qwen2.5-coder:7b`.
+
+---
+
 ## [3.1.0] - 2026-02-16
 
 ### Added
