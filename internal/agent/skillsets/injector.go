@@ -82,11 +82,21 @@ I need to find the current CEO of Google. I will use web_search.
 </thought>
 [TOOL:web_search|{"query": "current CEO of Google"}]
 
+**Example 3: Conversation**
+User: "hi"
+
+<thought>
+The user is greeting me. I don't need any tools.
+I will respond politely.
+</thought>
+Hello! How can I help you with your code today?
+
 **CRITICAL**: 
 1. ALWAYS start with a <thought> block.
 2. ALWAYS close with </thought>.
-3. THEN provide the [TOOL:...] action on a new line.
-4. Do NOT verify success inside the same turn. Wait for the tool result.`
+3. If you need a tool, provide [TOOL:...] on a new line.
+4. If you can answer WITHOUT a tool (e.g. "hi", "who are you?", "explain code"), just write the answer.
+5. Do NOT verify success inside the same turn. Wait for the tool result.`
 }
 
 // getGuidedFramework returns step-by-step guidance for Tier 3 models
