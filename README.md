@@ -57,7 +57,7 @@ aseity
 On first run, Aseity will:
 1. Check if Ollama is installed (offers to install if not)
 2. Start Ollama if it's not running
-3. Download the default model (qwen2.5:14b)
+3. Download the default model (qwen2.5-coder:7b)
 4. Launch the interactive chat
 
 ## Usage Examples
