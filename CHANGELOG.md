@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.1.2] - 2026-02-16
+
+### Fixed
+- **TUI Suggestion Passivity**: Updated the `validator` to provide directive, actionable suggestions when tools fail (e.g., "You MUST try a different tool...").
+  - Prevents the agent from passively asking the user to "Review the error message" repeatedly.
+  - Specifically handles `web_crawl` failures by nudging towards `web_fetch`.
+
+---
+
 ## [3.1.1] - 2026-02-16
 
 ### Fixed
