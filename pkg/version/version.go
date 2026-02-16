@@ -1,6 +1,6 @@
 package version
 
 var (
-	Version = "3.1.2"
+	Version = "3.2.0"
 	Commit  = "HEAD"
 )

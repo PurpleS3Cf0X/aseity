@@ -354,6 +354,20 @@ Aseity now uses a formal Memory Store interface to persist your context.
 
 ## Configuration
 
+Aseity requires a few environment variables to function properly. You can set these in your shell profile or a `.env` file (if supported by your runner).
+
+```bash
+# LLM Backend URL (Ollama, vLLM, etc.) - Required
+export OLLAMA_HOST="http://localhost:11434"
+
+# Optional: Enhanced Web Search (Google Custom Search)
+export GOOGLE_API_KEY="your_google_api_key"
+export GOOGLE_CX="your_custom_search_engine_id"
+
+# Optional: Crawl4AI Service (for advanced crawling)
+export CRAWL4AI_URL="http://localhost:11235"
+```
+
 Create `~/.config/aseity/config.yaml`:
 
 ```yaml

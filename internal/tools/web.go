@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -50,7 +51,14 @@ func (w *WebSearchTool) Execute(ctx context.Context, rawArgs string) (Result, er
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	// Use DuckDuckGo HTML search
+	// 1. Try Google Custom Search if configured
+	if apiKey := os.Getenv("GOOGLE_API_KEY"); apiKey != "" {
+		if cx := os.Getenv("GOOGLE_CX"); cx != "" {
+			return w.googleSearch(ctx, args.Query, args.NumResults, apiKey, cx)
+		}
+	}
+
+	// 2. Fallback to DuckDuckGo HTML search
 	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(args.Query))
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
 	if err != nil {
@@ -76,11 +84,70 @@ func (w *WebSearchTool) Execute(ctx context.Context, rawArgs string) (Result, er
 		return Result{Output: "No results found for: " + args.Query}, nil
 	}
 
+	return formatResults(results), nil
+}
+
+func (w *WebSearchTool) googleSearch(ctx context.Context, query string, numResults int, apiKey, cx string) (Result, error) {
+	// Google Custom Search JSON API
+	baseURL := "https://www.googleapis.com/customsearch/v1"
+	u, _ := url.Parse(baseURL)
+	q := u.Query()
+	q.Set("key", apiKey)
+	q.Set("cx", cx)
+	q.Set("q", query)
+	q.Set("num", fmt.Sprintf("%d", numResults))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return Result{Error: err.Error()}, nil
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Result{Error: "google search failed: " + err.Error()}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return Result{Error: fmt.Sprintf("google search error (status %d): %s", resp.StatusCode, string(body))}, nil
+	}
+
+	var response struct {
+		Items []struct {
+			Title   string `json:"title"`
+			Link    string `json:"link"`
+			Snippet string `json:"snippet"`
+		} `json:"items"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return Result{Error: "failed to decode google response: " + err.Error()}, nil
+	}
+
+	var results []searchResult
+	for _, item := range response.Items {
+		results = append(results, searchResult{
+			title:   item.Title,
+			url:     item.Link,
+			snippet: item.Snippet,
+		})
+	}
+
+	if len(results) == 0 {
+		return Result{Output: "No results found for: " + query}, nil
+	}
+
+	return formatResults(results), nil
+}
+
+func formatResults(results []searchResult) Result {
 	var sb strings.Builder
 	for i, r := range results {
 		fmt.Fprintf(&sb, "Result %d:\nTitle: %s\nURL: %s\nSnippet: %s\n\n", i+1, r.title, r.url, r.snippet)
 	}
-	return Result{Output: sb.String()}, nil
+	return Result{Output: sb.String()}
 }
 
 type searchResult struct {

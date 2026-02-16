@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/playwright-community/playwright-go"
 )
 
 type WebCrawlTool struct{}
@@ -75,17 +76,137 @@ func (w *WebCrawlTool) Execute(ctx context.Context, rawArgs string) (Result, err
 	}
 	args.URLs = cleanTargets
 
-	// 1. Try Crawl4AI (Service Batch)
+	// 1. Try Playwright (Primary Local)
+	if result, err := w.crawlBatchWithPlaywright(ctx, args); err == nil {
+		return result, nil
+	}
+
+	// 2. Try Crawl4AI (Service Batch)
 	if w.isCrawl4AIAvailable(ctx) {
 		result, err := w.crawlBatchWithService(ctx, args)
 		if err == nil {
 			return result, nil
 		}
-		// Fallback if service fails
 	}
 
-	// 2. Fallback to Concurrent Chromedp/HTTP
+	// 3. Fallback to Concurrent Chromedp/HTTP
 	return w.crawlBatchFallback(ctx, args)
+}
+
+func (w *WebCrawlTool) crawlBatchWithPlaywright(ctx context.Context, args webCrawlArgs) (Result, error) {
+	// Initialize Playwright
+	pw, err := playwright.Run()
+	if err != nil {
+		return Result{}, fmt.Errorf("could not start playwright: %v", err)
+	}
+	defer pw.Stop()
+
+	// Launch browser
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(true),
+	})
+	if err != nil {
+		return Result{}, fmt.Errorf("could not launch browser: %v", err)
+	}
+	defer browser.Close()
+
+	var wg sync.WaitGroup
+	results := make([]string, len(args.URLs))
+	errs := make([]error, len(args.URLs))
+	sem := make(chan struct{}, 3) // Concurrency limit
+
+	for i, u := range args.URLs {
+		wg.Add(1)
+		go func(idx int, targetUrl string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Create new context/page for isolation
+			bCtx, err := browser.NewContext(playwright.BrowserNewContextOptions{
+				UserAgent: playwright.String("Mozilla/5.0 (compatible; Aseity/1.0)"),
+			})
+			if err != nil {
+				errs[idx] = err
+				results[idx] = fmt.Sprintf("Error creating context for %s: %v", targetUrl, err)
+				return
+			}
+			defer bCtx.Close()
+
+			page, err := bCtx.NewPage()
+			if err != nil {
+				errs[idx] = err
+				results[idx] = fmt.Sprintf("Error creating page for %s: %v", targetUrl, err)
+				return
+			}
+			defer page.Close()
+
+			// Navigate
+			if _, err = page.Goto(targetUrl, playwright.PageGotoOptions{
+				WaitUntil: playwright.WaitUntilStateNetworkidle,
+				Timeout:   playwright.Float(30000),
+			}); err != nil {
+				errs[idx] = err
+				results[idx] = fmt.Sprintf("Error navigating to %s: %v", targetUrl, err)
+				return
+			}
+
+			// Wait for selector if specified
+			if args.WaitFor != "" {
+				page.WaitForSelector(args.WaitFor, playwright.PageWaitForSelectorOptions{
+					Timeout: playwright.Float(10000),
+				})
+			}
+
+			// Content
+			content, err := page.InnerText("body")
+			if err != nil {
+				// Fallback to evaluating document.body.innerText
+				val, _ := page.Evaluate("document.body.innerText")
+				if s, ok := val.(string); ok {
+					content = s
+				}
+			}
+
+			output := fmt.Sprintf("--- SOURCE: %s (Playwright) ---\n%s", targetUrl, truncateText(content, 2000))
+
+			// Screenshot
+			if args.Screenshot {
+				cwd, _ := os.Getwd()
+				filename := fmt.Sprintf("screenshot_%d_%s.png", time.Now().Unix(), sanitizeFilename(targetUrl))
+				path := filepath.Join(cwd, filename)
+				if _, err := page.Screenshot(playwright.PageScreenshotOptions{
+					Path: playwright.String(path),
+				}); err == nil {
+					output += fmt.Sprintf("\n[Screenshot: %s]", path)
+				}
+			}
+
+			results[idx] = output
+		}(i, u)
+	}
+
+	wg.Wait()
+
+	// Check if all failed
+	allFailed := true
+	for _, err := range errs {
+		if err == nil {
+			allFailed = false
+			break
+		}
+	}
+	if allFailed && len(args.URLs) > 0 {
+		return Result{}, fmt.Errorf("all playwright crawls failed")
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Batch Crawl (Playwright) - %d URLs:\n\n", len(args.URLs)))
+	for _, r := range results {
+		sb.WriteString(r + "\n\n")
+	}
+
+	return Result{Output: sb.String()}, nil
 }
 
 func (w *WebCrawlTool) isCrawl4AIAvailable(ctx context.Context) bool {

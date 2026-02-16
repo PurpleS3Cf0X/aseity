@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0] - 2026-02-16
+
+### Added
+- **Playwright-Go Crawler**: Replaced `chromedp` with `playwright-go` as the primary crawling engine.
+  - Supports better JavaScript rendering and stealth.
+  - Falls back to `assist-service` (Crawl4AI) or HTTP if Playwright fails.
+- **Google Custom Search Integration**: Added optional support for Google Custom Search JSON API.
+  - Set `GOOGLE_API_KEY` and `GOOGLE_CX` to use it.
+  - Provides richer search results compared to the default DuckDuckGo scraper.
+
+---
+
 ## [3.1.2] - 2026-02-16
 
 ### Fixed
