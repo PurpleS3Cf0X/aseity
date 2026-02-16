@@ -186,5 +186,5 @@ func SuggestCorrection(call provider.ToolCall, errorMsg string, ctx ValidationCo
 		}
 	}
 
-	return "Review the error message and try a different approach."
+	return "The tool execution failed. Analyze the error message above. You MUST try a different tool (e.g., using 'web_fetch' instead of 'web_crawl') or start a new search. Do not give up."
 }
