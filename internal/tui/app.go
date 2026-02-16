@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"html"
 	"math/rand"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	table "github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -128,6 +130,7 @@ var toolIcons = map[string]string{
 }
 
 type agentEventMsg agent.Event
+type memorySavedMsg struct{} // Msg to signal memory save completion
 
 type SpinnerState int
 
@@ -167,11 +170,13 @@ type Model struct {
 	currentThinkingSpinner spinner.Spinner
 	currentThinkingStyle   lipgloss.Style
 	menu                   MenuModel
+	quitting               bool // True when shutdown sequence started
 }
 
 type chatMessage struct {
 	role     string
 	content  string
+	data     any    // Structured data from tools
 	rendered string // Caches the markdown rendering to avoid re-rendering entire history on every frame
 }
 
@@ -396,10 +401,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.HalfViewDown()
 			return m, nil
 		case tea.KeyEsc:
-			// Save session on exit
-			m.agent.Conversation().Save()
-			m.cancel()
-			return m, tea.Quit
+			// Trigger cleanup sequence
+			m.quitting = true
+			m.messages = append(m.messages, chatMessage{role: "system", content: "  💾 Saving memory and closing session..."})
+			m.rebuildView()
+			return m, m.saveMemoryCmd()
 		case tea.KeyCtrlC:
 			// If agent is busy, cancel the operation
 			if m.thinking || m.confirming || m.currentTool != "" {
@@ -564,12 +570,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case agent.EventToolResult:
 			// Reset spinner back to thinking state
 			m.resetSpinner()
-			if evt.Result != "" {
+
+			// Store result and data
+			if evt.Result != "" || evt.Data != nil {
 				result := evt.Result
-				if len(result) > 500 {
-					result = result[:500] + "\n  ... (truncated)"
+				if len(result) > 1000 && evt.Data == nil { // Only truncate text if no structured data
+					result = result[:1000] + "\n  ... (truncated)"
 				}
-				m.messages = append(m.messages, chatMessage{role: "tool_result", content: result})
+				m.messages = append(m.messages, chatMessage{
+					role:    "tool_result",
+					content: result,
+					data:    evt.Data,
+				})
 			}
 			if evt.Error != "" {
 				m.messages = append(m.messages, chatMessage{role: "error", content: evt.Error})
@@ -648,8 +660,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildView()
 		if !evt.Done {
 			return m, m.waitForEvent()
+			m.rebuildView()
+			return m, nil
 		}
-		return m, nil
+
+	case memorySavedMsg:
+		return m, tea.Quit
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -743,7 +759,40 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 		msgCount := m.agent.Conversation().Len()
 		m.messages = append(m.messages, chatMessage{
 			role:    "system",
-			content: fmt.Sprintf("  ~%dk tokens, %d messages", tokens/1000, msgCount),
+			content: fmt.Sprintf("  ~%d tokens, %d messages", tokens, msgCount),
+		})
+
+	case "/cost":
+		tokens := m.agent.Conversation().EstimatedTokens()
+		// Rough estimate using Claude 3.5 Sonnet blended rate (skewed towards input)
+		// Input: $3/1M, Output: $15/1M. Assume 80/20 split -> ~$5.40/1M blended
+		cost := float64(tokens) / 1_000_000 * 5.40
+		m.messages = append(m.messages, chatMessage{
+			role:    "system",
+			content: fmt.Sprintf("  ~%d tokens\n  Est. Cost (Sonnet 3.5): ~$%.4f", tokens, cost),
+		})
+
+	case "/init":
+		if _, err := os.Stat("ASEITY.md"); err == nil {
+			m.messages = append(m.messages, chatMessage{role: "system", content: "  ASEITY.md already exists."})
+		} else {
+			content := "# ASEITY.md\n\n## Project Context\n- [ ] Describe your project high-level goals.\n\n## Architecture\n- [ ] List key architectural patterns.\n\n## Code Style\n- [ ] defined coding standards.\n\n## Common Commands\n- Build: `go build ./...`\n- Test: `go test ./...`\n"
+			if err := os.WriteFile("ASEITY.md", []byte(content), 0644); err != nil {
+				m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("Failed to create ASEITY.md: %v", err)})
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "system", content: "  Created ASEITY.md template."})
+			}
+		}
+
+	case "/thinking":
+		m.showThinking = !m.showThinking
+		state := "hidden"
+		if m.showThinking {
+			state = "visible"
+		}
+		m.messages = append(m.messages, chatMessage{
+			role:    "system",
+			content: fmt.Sprintf("  Thinking blocks are now %s.", state),
 		})
 
 	case "/model":
@@ -753,9 +802,10 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 		})
 
 	case "/quit":
-		m.agent.Conversation().Save()
-		m.cancel()
-		return *m, tea.Quit
+		m.quitting = true
+		m.messages = append(m.messages, chatMessage{role: "system", content: "  💾 Saving memory and closing session..."})
+		m.rebuildView()
+		return *m, m.saveMemoryCmd()
 
 	case "/status":
 		out, err := exec.Command("git", "status").CombinedOutput()
@@ -786,20 +836,12 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{role: "error", content: "Usage: /commit \"message\""})
 		} else {
 			// Primitive argument parsing to handle quotes
-			// strings.Fields splits by space, so "p 1" becomes ["p", "1"]
-			// We need to rejoin everything after /commit
 			msg := strings.Join(parts[1:], " ")
 			msg = strings.Trim(msg, "\"")
 
-			// We should probably run 'git add .' first?
-			// The user expectation of "commit" might imply "add and commit" or just commit.
-			// Let's assume standard behavior: commit what is staged, unless user asks otherwise.
-			// OR, for convenience, "commit -am" if prompt implies.
-			// Let's stick to simple "commit -m".
-
 			out, err := exec.Command("git", "commit", "-m", msg).CombinedOutput()
 			if err != nil {
-				m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("git commit failed: %v\n%s", err, out)})
+				m.messages = append(m.messages, chatMessage{role: "error", content: fmt.Sprintf("git commit failed: %v", err)})
 			} else {
 				m.messages = append(m.messages, chatMessage{role: "system", content: "  Git Commit:\n" + string(out)})
 			}
@@ -814,6 +856,22 @@ func (m *Model) handleSlashCommand(text string) (Model, tea.Cmd) {
 
 	m.rebuildView()
 	return *m, nil
+}
+
+func (m Model) saveMemoryCmd() tea.Cmd {
+	return func() tea.Msg {
+		// Run extraction with a timeout context to avoid hanging forever on exit
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		// We ignore errors here as we want to exit regardless
+		_ = m.agent.ExtractLearnings(ctx)
+
+		// Also save the conversation history
+		m.agent.Conversation().Save()
+
+		return memorySavedMsg{}
+	}
 }
 
 func (m *Model) waitForEvent() tea.Cmd {
@@ -1017,11 +1075,11 @@ func (m *Model) rebuildView() {
 				// To keep it safe, WE DO NOT CACHE grouped tools for now.
 				i++ // Skip next message
 			}
-			renderedBlock = m.renderToolBlock(msg.content, result)
+			renderedBlock = m.renderToolBlock(msg.content, result, msg.data)
 
 		case "tool_result":
 			// Orphaned result (shouldn't happen often if grouped above)
-			renderedBlock = m.renderToolBlock("Previous Tool", msg.content)
+			renderedBlock = m.renderToolBlock("Previous Tool", msg.content, msg.data)
 
 		case "confirm_prompt":
 			renderedBlock = WarningStyle.Render("  ⚠ ") + ConfirmStyle.Render(msg.content) + "\n\n"
@@ -1196,7 +1254,7 @@ func (m *Model) renderThinkingBlock(content string) string {
 	return ThinkingBlockStyle.Render(formatted.String()) + "\n"
 }
 
-func (m *Model) renderToolBlock(header, result string) string {
+func (m *Model) renderToolBlock(header, result string, data any) string {
 	// header comes from formatToolCallDisplay, so it's already styled/colored.
 	// But lipgloss styles might strip if we nest? No, usually fine.
 
@@ -1212,7 +1270,14 @@ func (m *Model) renderToolBlock(header, result string) string {
 		// Unescape result content
 		result = html.UnescapeString(result)
 
-		if len(result) > 500 {
+		if data != nil {
+			// Try to render structured data
+			if structStr := m.renderStructuredData(data); structStr != "" {
+				result = structStr
+			} else if len(result) > 500 {
+				result = result[:500] + "\n... (truncated)"
+			}
+		} else if len(result) > 500 {
 			result = result[:500] + "\n... (truncated)"
 		}
 		content = lipgloss.JoinVertical(lipgloss.Left,
@@ -1368,4 +1433,117 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// --- Structured Data Rendering ---
+
+func (m *Model) renderStructuredData(data any) string {
+	// Handle nil
+	if data == nil {
+		return ""
+	}
+
+	// 1. Check for specific types (via map)
+	if mData, ok := data.(map[string]any); ok {
+		if t, ok := mData["type"].(string); ok {
+			switch t {
+			case "diff":
+				return m.renderDiff(mData)
+			}
+		}
+	}
+
+	// 2. Try Slice of Maps (JSON Array of Objects) => Table
+	// Because unmarshalling into interface{} usually gives []interface{} or []map[string]interface{}
+	if list, ok := data.([]interface{}); ok {
+		if len(list) == 0 {
+			return ""
+		}
+		// Check first item to see if it's a map
+		if _, ok := list[0].(map[string]interface{}); ok {
+			return m.renderMapListTable(list)
+		}
+	}
+
+	// TODO: Handle other types (single map, etc.)
+	return ""
+}
+
+func (m *Model) renderDiff(data map[string]any) string {
+	path, _ := data["path"].(string)
+	diffContent, _ := data["diff"].(string)
+
+	if diffContent == "" {
+		return ""
+	}
+
+	// Create a markdown block for the diff
+	md := fmt.Sprintf("```diff\n%s\n```", diffContent)
+
+	// Render it
+	rendered, err := m.renderer.Render(md)
+	if err != nil {
+		return diffContent // Fallback to raw
+	}
+
+	// Add header
+	header := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(fmt.Sprintf("📄 %s", path))
+
+	return fmt.Sprintf("\n%s\n%s", header, rendered)
+}
+
+func (m *Model) renderMapListTable(list []interface{}) string {
+	if len(list) == 0 {
+		return ""
+	}
+
+	// 1. Discover Columns (Keys)
+	// For simplicity, take keys from the first object.
+	// Robust way: union of all keys.
+	first, _ := list[0].(map[string]interface{})
+	var columns []table.Column
+	var keys []string
+
+	for k := range first {
+		keys = append(keys, k)
+		columns = append(columns, table.Column{Title: k, Width: 20}) // Default width
+	}
+
+	// 2. Build Rows
+	var rows []table.Row
+	for _, item := range list {
+		obj, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		var row table.Row
+		for _, k := range keys {
+			val := fmt.Sprintf("%v", obj[k])
+			row = append(row, val)
+		}
+		rows = append(rows, row)
+	}
+
+	// 3. Configure Table
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(false),
+		table.WithHeight(len(rows)+1), // Exact height
+	)
+
+	// Style
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Bold(false)
+	t.SetStyles(s)
+
+	return "\n" + t.View() + "\n"
 }

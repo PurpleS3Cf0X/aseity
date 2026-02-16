@@ -13,7 +13,7 @@ import (
 )
 
 // launchOrchestrator runs the orchestrator mode
-func launchOrchestrator(cfg *config.Config, provName, modelName, query string, debug bool, maxRetries, maxSteps int, parallel bool) {
+func launchOrchestrator(cfg *config.Config, provName, modelName, query string, debug bool, maxRetries, maxSteps int, parallel bool, deepResearch bool) {
 	if query == "" {
 		fatal("orchestrator mode requires a query (provide as argument)")
 	}
@@ -27,12 +27,26 @@ func launchOrchestrator(cfg *config.Config, provName, modelName, query string, d
 	// Create tool registry
 	toolReg := tools.NewRegistry(nil, false) // No auto-approve, not allow-all
 
-	// Create orchestrator
-	orch := orchestrator.NewOrchestrator(prov, toolReg, &orchestrator.Config{
+	// Configure orchestrator
+	orchConfig := &orchestrator.Config{
 		MaxRetries: maxRetries,
 		MaxSteps:   maxSteps,
 		StateDir:   filepath.Join(os.TempDir(), "aseity-orchestrator-state"),
-	})
+	}
+
+	if deepResearch {
+		orchConfig.ForceIntent = &orchestrator.IntentOutput{
+			IntentType:    "deep_research",
+			RequiresTools: true,
+			Complexity:    "complex",
+			Reasoning:     "User explicitly requested Deep Research mode.",
+			Entities:      []string{query},
+		}
+		fmt.Println("🚀 Deep Research Mode Enabled")
+	}
+
+	// Create orchestrator
+	orch := orchestrator.NewOrchestrator(prov, toolReg, orchConfig)
 
 	// Enable parallel execution if requested
 	orch.EnableParallel = parallel

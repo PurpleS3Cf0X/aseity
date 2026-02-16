@@ -5,6 +5,7 @@ import "context"
 type Result struct {
 	Output string
 	Error  string
+	Data   any // Structured data for TUI rendering (e.g., Table, Diff)
 }
 
 type Tool interface {

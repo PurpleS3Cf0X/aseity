@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.1.0] - 2026-02-16
+
+### Added
+- **Deep Research Mode**: New `--deep-research` CLI flag to force comprehensive multi-step research sessions
+  - Bypasses intent detection to ensure deep analysis
+  - Automatically triggers `web_search` -> `web_fetch` -> Synthesis loop
+  - Optimizes planner prompts for research tasks
+- **Orchestrator Stability**: Significant improvements to the experimental orchestrator
+  - Fixed JSON parsing for models (like Qwen 2.5 Coder) that output comments in JSON
+  - Enforced stricter tool usage rules (banning `open`/`curl` in favor of `web_fetch`)
+  - Added graceful shutdown and state saving on `SIGINT`
+
+### Fixed
+- **Planner Bug**: Resolved `invalid character '/'` JSON errors caused by models including comments in plans.
+- **Headless Execution**: Improved reliability of orchestrator in headless environments.
+
+---
+
 ## [2.21.1] - 2026-02-11
 
 ### Improved

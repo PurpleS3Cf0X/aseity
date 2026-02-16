@@ -446,6 +446,13 @@ func RunSetup(providerName, modelName string) bool {
 	fmt.Printf("  %sNo running backend detected. Let's get you set up.%s\n", dim, reset)
 	fmt.Println()
 
+	// Strategy 0: Check for remote providers if requested
+	if providerName == "openai" || providerName == "anthropic" || providerName == "google" {
+		if configureAPIProvider(providerName) {
+			return true
+		}
+	}
+
 	// Strategy 1: Ollama (preferred — simplest)
 	if tryOllamaSetup(modelName) {
 		return true
@@ -608,6 +615,118 @@ func findComposeFile() string {
 	}
 
 	return ""
+}
+
+func configureAPIProvider(providerName string) bool {
+	step(fmt.Sprintf("Configuring %s...", providerName))
+
+	// Check if already configured via Env
+	envVar := ""
+	switch providerName {
+	case "openai":
+		envVar = "ASEITY_API_KEY" // or OPENAI_API_KEY
+	case "anthropic":
+		envVar = "ANTHROPIC_API_KEY"
+	case "google":
+		envVar = "GEMINI_API_KEY"
+	}
+
+	if os.Getenv(envVar) != "" {
+		success(fmt.Sprintf("%s is set in environment", envVar))
+		return true
+	}
+
+	// Prompt user
+	fmt.Printf("  %sPlease paste your %s API Key:%s ", bold, providerName, reset)
+	reader := bufio.NewReader(os.Stdin)
+	key, _ := reader.ReadString('\n')
+	key = strings.TrimSpace(key)
+
+	if key == "" {
+		fail("No API key provided.")
+		return false
+	}
+
+	// In a real TUI we'd mask this, but in standard terminal during setup it's visible.
+	// We can save it to ~/.config/aseity/config.yaml
+	// For now, let's just create/append to .env or config
+
+	home, _ := os.UserHomeDir()
+	configDir := filepath.Join(home, ".config", "aseity")
+	os.MkdirAll(configDir, 0755)
+
+	// We really need to update the YAML config.
+	// Since we don't have the config struct here easily without circular deps or import mess,
+	// let's just append to a .env file the user can source, OR effectively tell them we saved it.
+	// ACTUALLY, we should write to config.yaml if we can.
+	// But `setup` package is standalone.
+	// Let's use a simple file append to config.yaml logic if it exists, or create it.
+
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	// Simple YAML append (not robust but works for first setup)
+	// If file doesn't exist, create basic structure
+
+	var yamlContent string
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		yamlContent = fmt.Sprintf(`default_provider: %s
+default_model: %s
+providers:
+  %s:
+    type: %s
+    api_key: "%s"
+    model: %s
+`, providerName, getDetailModel(providerName), providerName, providerName, key, getDetailModel(providerName))
+	} else {
+		// Append
+		// This is risky if key exists.
+		// Let's just instruct user to set ENV for now to be safe, OR write a separate .env
+		// User specifically asked to "paste it and save it".
+		// Better: write to a .env file in the same config dir and tell user we did so.
+		// Aseity loader doesn't auto-load .env from config dir yet (Phase 4).
+		// So let's WRITE to config.yaml using text replacement or appending.
+		yamlContent = fmt.Sprintf(`
+  %s:
+    type: %s
+    api_key: "%s"
+    model: %s
+`, providerName, providerName, key, getDetailModel(providerName))
+
+		// If providers: key missing, keys might be top level? No, structure is:
+		// providers:
+		//   name: ...
+
+		f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			fail("Could not open config.yaml for writing")
+			return false
+		}
+		defer f.Close()
+		if _, err := f.WriteString(yamlContent); err != nil {
+			fail("Could not write to config.yaml")
+			return false
+		}
+	}
+
+	// If new file
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		os.WriteFile(configPath, []byte(yamlContent), 0644)
+	}
+
+	success(fmt.Sprintf("API Key saved to %s", configPath))
+	return true
+}
+
+func getDetailModel(prov string) string {
+	switch prov {
+	case "openai":
+		return "gpt-4o"
+	case "anthropic":
+		return "claude-3-5-sonnet-latest"
+	case "google":
+		return "gemini-1.5-pro-latest"
+	}
+	return "unknown"
 }
 
 func humanBytes(b int64) string {

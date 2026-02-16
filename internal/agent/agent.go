@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jeanpaul/aseity/internal/agent/skillsets"
+	"github.com/jeanpaul/aseity/internal/memory"
 	"github.com/jeanpaul/aseity/internal/provider"
 	"github.com/jeanpaul/aseity/internal/tools"
 )
@@ -24,6 +26,7 @@ type Event struct {
 	ToolArgs string
 	ToolID   string
 	Result   string
+	Data     any // Structured data from tool result
 	Error    string
 	Done     bool
 	Usage    *provider.Usage // Token usage for the response
@@ -65,6 +68,10 @@ type Agent struct {
 	orchestrator       interface{} // *orchestrator.Orchestrator (avoid import cycle)
 	orchestratorConfig OrchestratorConfig
 	ProgressCh         chan OrchestratorProgress // Send progress updates to TUI
+
+	// Memory Systems (Claude Code Replication)
+	projectContext *memory.ProjectContext
+	autoMemory     memory.Store
 }
 
 // OrchestratorConfig holds orchestrator settings
@@ -124,6 +131,18 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 		systemPrompt += "\n\n" + custom.Training
 	}
 
+	// --- MEMORY SYSTEM INTEGRATION ---
+	// 1. Load Auto-Memory (Persisted User Learning)
+	autoMem := memory.NewAutoMemory()
+	if memPrompt, err := autoMem.RetrieveContext(); err == nil && memPrompt != "" {
+		systemPrompt += "\n\n" + memPrompt
+	}
+
+	// 2. Load Project Context (ASEITY.md / CLAUDE.md)
+	// We load this dynamically in the runLoop (Reflect phase) to ensure it's always up to date.
+	cwd, _ := os.Getwd()
+	projCtx, _ := memory.LoadProjectContext(cwd) // Pre-load to checking existence logic or initial state
+
 	conv.AddSystem(systemPrompt)
 
 	// CRITICAL: Set the conversation context limit to match the model's capabilities.
@@ -133,14 +152,16 @@ func New(prov provider.Provider, registry *tools.Registry, systemPrompt string) 
 	}
 
 	return &Agent{
-		prov:       prov,
-		tools:      registry,
-		conv:       conv,
-		ConfirmCh:  make(chan bool),
-		InputCh:    make(chan string),
-		RequestCh:  make(chan struct{}),
-		profile:    profile,
-		userConfig: userConfig,
+		prov:           prov,
+		tools:          registry,
+		conv:           conv,
+		ConfirmCh:      make(chan bool),
+		InputCh:        make(chan string),
+		RequestCh:      make(chan struct{}),
+		profile:        profile,
+		userConfig:     userConfig,
+		projectContext: projCtx,
+		autoMemory:     autoMem,
 	}
 }
 
@@ -174,15 +195,22 @@ func NewWithConversation(prov provider.Provider, registry *tools.Registry, conv 
 		conv.SetMaxTokens(profile.MaxTokens)
 	}
 
+	// Load memory for struct (even if not injecting into prompt as conv is existing)
+	cwd, _ := os.Getwd()
+	projCtx, _ := memory.LoadProjectContext(cwd)
+	autoMem := memory.NewAutoMemory()
+
 	return &Agent{
-		prov:       prov,
-		tools:      registry,
-		conv:       conv,
-		ConfirmCh:  make(chan bool, 1),
-		InputCh:    make(chan string, 1),
-		RequestCh:  make(chan struct{}),
-		profile:    profile,
-		userConfig: userConfig,
+		prov:           prov,
+		tools:          registry,
+		conv:           conv,
+		ConfirmCh:      make(chan bool, 1),
+		InputCh:        make(chan string, 1),
+		RequestCh:      make(chan struct{}),
+		profile:        profile,
+		userConfig:     userConfig,
+		projectContext: projCtx,
+		autoMemory:     autoMem,
 	}
 }
 
@@ -272,12 +300,42 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 		// Construct the context with a dynamic reminder
 		msgs := a.conv.Messages()
 
+		// Helper to inject system messages before the last user message
+		// This ensures the User's request remains the focal point at the end.
+		var dynamicSysMsgs []provider.Message
+
 		// Inject dynamic skillset training temporarily (if any)
 		if tempSystemPrompt != "" {
-			msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: tempSystemPrompt})
+			dynamicSysMsgs = append(dynamicSysMsgs, provider.Message{Role: provider.RoleSystem, Content: tempSystemPrompt})
 		}
 
-		// Inject a reminder at the end of context to keep the model focused
+		// --- REFLECT PHASE ---
+		// 1. Refresh Project Context
+		cwd, _ := os.Getwd()
+		if currentCtx, err := memory.LoadProjectContext(cwd); err == nil {
+			// Inject updated project context
+			dynamicSysMsgs = append(dynamicSysMsgs, provider.Message{Role: provider.RoleSystem, Content: currentCtx.ToPrompt()})
+		} else if a.projectContext != nil {
+			// Fallback to cached context if load fails but we had one
+			dynamicSysMsgs = append(dynamicSysMsgs, provider.Message{Role: provider.RoleSystem, Content: a.projectContext.ToPrompt()})
+		}
+
+		// 2. Refresh Project TODOs
+		if todoList, err := memory.LoadTodoList(cwd); err == nil && todoList != "" {
+			dynamicSysMsgs = append(dynamicSysMsgs, provider.Message{Role: provider.RoleSystem, Content: todoList})
+		}
+
+		// Inject dynamic messages before the last message if possible
+		if len(msgs) > 0 {
+			lastMsg := msgs[len(msgs)-1]
+			msgs = msgs[:len(msgs)-1]
+			msgs = append(msgs, dynamicSysMsgs...)
+			msgs = append(msgs, lastMsg)
+		} else {
+			msgs = append(msgs, dynamicSysMsgs...)
+		}
+
+		// Inject a reminder at the very end to keep the model focused
 		reminder := fmt.Sprintf("Turn %d/%d. Review the history. If you just ran a command, did it work? If it failed, try a DIFFERENT approach. Do not repeat mistakes.", turn+1, MaxTurns)
 		msgs = append(msgs, provider.Message{Role: provider.RoleSystem, Content: reminder})
 
@@ -311,9 +369,58 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 		}
 
 		assistantText := textBuf.String()
+
+		// CoT Parsing: Extract <thought> tags for event emission (for models without native support)
+		// We do this post-generation to ensure we capture the full block even if it was streamed as text.
+		// This improves TUI visibility of the reasoning process.
+		thoughtRe := regexp.MustCompile(`(?s)<thought>(.*?)</thought>`)
+		thoughtMatches := thoughtRe.FindStringSubmatch(assistantText)
+		if len(thoughtMatches) > 1 {
+			events <- Event{
+				Type: EventThinking,
+				Text: strings.TrimSpace(thoughtMatches[1]),
+			}
+		}
+
 		a.conv.AddAssistant(assistantText, toolCalls)
 
-		// FALLBACK: If no native tool calls, check for text-based pattern [TOOL:name|json_args]
+		// FALLBACK 1: Check for raw JSON format `{"name": "tool", "arguments": {...}}`
+		// Some models (like Qwen 2.5 Coder) prefer this over the [TOOL:...] format despite instructions.
+		if len(toolCalls) == 0 && strings.Contains(assistantText, "{") {
+			decoder := json.NewDecoder(strings.NewReader(assistantText))
+			for {
+				var rawCall struct {
+					Name      string `json:"name"`
+					Arguments any    `json:"arguments"`
+				}
+				if err := decoder.Decode(&rawCall); err != nil {
+					// Stop decoding on error (likely end of valid JSON or just text)
+					break
+				}
+
+				if rawCall.Name != "" {
+					// Handle Arguments being a map or string
+					var argsStr string
+					switch v := rawCall.Arguments.(type) {
+					case string:
+						argsStr = v
+					case map[string]interface{}:
+						b, _ := json.Marshal(v)
+						argsStr = string(b)
+					default:
+						argsStr = "{}"
+					}
+
+					toolCalls = append(toolCalls, provider.ToolCall{
+						ID:   fmt.Sprintf("json-%d-%d", time.Now().UnixNano(), len(toolCalls)),
+						Name: rawCall.Name,
+						Args: argsStr,
+					})
+				}
+			}
+		}
+
+		// FALLBACK 2: Check for text-based pattern [TOOL:name|json_args]
 		if len(toolCalls) == 0 {
 			// Regex to capture: [TOOL:name|args]
 			// We handle nested braces loosely or just take until the last ] on the line if simple
@@ -458,7 +565,13 @@ func (a *Agent) runLoop(ctx context.Context, events chan<- Event, tempSystemProm
 					}
 
 					a.conv.AddToolResult(tc.ID, res.Output)
-					events <- Event{Type: EventToolResult, ToolID: tc.ID, ToolName: tc.Name, Result: res.Output}
+					events <- Event{
+						Type:     EventToolResult,
+						ToolID:   tc.ID,
+						ToolName: tc.Name,
+						Result:   res.Output,
+						Data:     res.Data,
+					}
 				}(tc)
 			}
 
@@ -629,8 +742,12 @@ Respond following this structure.`, tc.Name, tc.Name, a.OriginalGoal)
 			}
 
 			events <- Event{
-				Type: EventToolResult, ToolID: tc.ID,
-				ToolName: tc.Name, ToolArgs: prettyArgs, Result: output,
+				Type:     EventToolResult,
+				ToolID:   tc.ID,
+				ToolName: tc.Name,
+				ToolArgs: prettyArgs,
+				Result:   output,
+				Data:     res.Data,
 			}
 		}
 	}

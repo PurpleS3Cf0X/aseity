@@ -8,13 +8,14 @@ import (
 
 // ValidIntentTypes defines allowed intent types
 var ValidIntentTypes = map[string]bool{
-	"search":  true,
-	"fetch":   true,
-	"analyze": true,
-	"execute": true,
-	"create":  true,
-	"modify":  true,
-	"general": true,
+	"search":        true,
+	"fetch":         true,
+	"analyze":       true,
+	"execute":       true,
+	"create":        true,
+	"modify":        true,
+	"general":       true,
+	"deep_research": true,
 }
 
 // ValidComplexityLevels defines allowed complexity levels
@@ -183,7 +184,40 @@ func cleanJSONOutput(output string) string {
 		output = output[start : end+1]
 	}
 
+	// Strip comments (C-style //)
+	output = stripJSONComments(output)
+
 	return output
+}
+
+func stripJSONComments(jsonStr string) string {
+	var result strings.Builder
+	lines := strings.Split(jsonStr, "\n")
+
+	for _, line := range lines {
+		result.WriteString(stripLineComments(line) + "\n")
+	}
+	return result.String()
+}
+
+func stripLineComments(line string) string {
+	var buf strings.Builder
+	inString := false
+	for i := 0; i < len(line); i++ {
+		char := line[i]
+
+		if char == '"' && (i == 0 || line[i-1] != '\\') {
+			inString = !inString
+		}
+
+		if !inString && i+1 < len(line) && char == '/' && line[i+1] == '/' {
+			// Found comment start outside string
+			return buf.String()
+		}
+
+		buf.WriteByte(char)
+	}
+	return buf.String()
 }
 
 // CreateDefaultIntent creates a fail-safe default intent

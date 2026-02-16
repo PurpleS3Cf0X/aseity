@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 const maxFileReadSize = 10 * 1024 * 1024 // 10MB limit
@@ -21,7 +23,7 @@ type fileReadArgs struct {
 
 func (f *FileReadTool) Name() string { return "file_read" }
 func (f *FileReadTool) Description() string {
-	return "Read the contents of a file. Supports Text, PDF, and Excel (.xlsx). Returns numbered lines for text/PDF, and Markdown tables for Excel."
+	return "Read the contents of a file or multiple files using glob patterns (e.g. 'internal/**/*.go'). Supports Text, PDF, and Excel. Returns content with line numbers (text) or markdown tables (Excel)."
 }
 func (f *FileReadTool) NeedsConfirmation() bool { return false }
 
@@ -29,9 +31,9 @@ func (f *FileReadTool) Parameters() any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"path":   map[string]any{"type": "string", "description": "Absolute or relative file path"},
-			"offset": map[string]any{"type": "integer", "description": "Line offset to start reading from (0-indexed)"},
-			"limit":  map[string]any{"type": "integer", "description": "Max number of lines to read (default 2000)"},
+			"path":   map[string]any{"type": "string", "description": "File path or glob pattern (e.g. '**/*.go')"},
+			"offset": map[string]any{"type": "integer", "description": "Line offset (only for single file)"},
+			"limit":  map[string]any{"type": "integer", "description": "Max lines (default 2000)"},
 		},
 		"required": []string{"path"},
 	}
@@ -43,49 +45,86 @@ func (f *FileReadTool) Execute(_ context.Context, rawArgs string) (Result, error
 		return Result{Error: "invalid arguments: " + err.Error()}, nil
 	}
 
-	// Check file size before reading
-	info, err := os.Stat(args.Path)
+	// Check for glob
+	if isGlob(args.Path) {
+		matches, err := doublestar.FilepathGlob(args.Path)
+		if err != nil {
+			return Result{Error: "glob error: " + err.Error()}, nil
+		}
+		if len(matches) == 0 {
+			return Result{Error: fmt.Sprintf("no files found matching pattern: %s", args.Path)}, nil
+		}
+
+		// Safety limit
+		if len(matches) > 20 {
+			return Result{Error: fmt.Sprintf("matches %d files (limit 20). Please refine your pattern.", len(matches))}, nil
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Found %d files:\n\n", len(matches)))
+
+		for _, match := range matches {
+			content, err := f.readFile(match, 0, 1000) // Default limit 1000 lines per file in batch mode
+			if err != nil {
+				fmt.Fprintf(&sb, "## Error reading %s: %v\n\n", match, err)
+			} else {
+				fmt.Fprintf(&sb, "## File: %s\n%s\n\n", match, content)
+			}
+		}
+		return Result{Output: sb.String()}, nil
+	}
+
+	// Single file read
+	content, err := f.readFile(args.Path, args.Offset, args.Limit)
 	if err != nil {
 		return Result{Error: err.Error()}, nil
 	}
+	return Result{Output: content}, nil
+}
+
+func isGlob(path string) bool {
+	return strings.ContainsAny(path, "*?[{")
+}
+
+func (f *FileReadTool) readFile(path string, offset, limit int) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
 	if info.IsDir() {
-		return Result{Error: fmt.Sprintf("%s is a directory, not a file", args.Path)}, nil
+		return "", fmt.Errorf("%s is a directory", path)
 	}
 	if info.Size() > maxFileReadSize {
-		return Result{Error: fmt.Sprintf("file is too large (%d bytes, max %d). Use offset/limit to read a portion.", info.Size(), maxFileReadSize)}, nil
+		return "", fmt.Errorf("file too large (%d bytes)", info.Size())
 	}
 
-	// Check file extension for specialized parsing
-	ext := strings.ToLower(filepath.Ext(args.Path))
+	ext := strings.ToLower(filepath.Ext(path))
 	var content string
 	var parseErr error
 
 	switch ext {
 	case ".pdf":
-		content, parseErr = parsePDF(args.Path)
+		content, parseErr = parsePDF(path)
 	case ".xlsx", ".xlsm":
-		content, parseErr = parseExcel(args.Path)
+		content, parseErr = parseExcel(path)
 	default:
-		// Default text reading
-		data, err := os.ReadFile(args.Path)
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return Result{Error: err.Error()}, nil
+			return "", err
 		}
 		content = string(data)
 	}
 
 	if parseErr != nil {
-		return Result{Error: fmt.Sprintf("failed to parse %s: %v", ext, parseErr)}, nil
+		return "", fmt.Errorf("failed to parse %s: %v", ext, parseErr)
 	}
 
 	lines := strings.Split(content, "\n")
-	start := args.Offset
+	start := offset
 	if start > len(lines) {
 		start = len(lines)
 	}
 
-	// Default limit of 2000 lines
-	limit := args.Limit
 	if limit <= 0 {
 		limit = 2000
 	}
@@ -96,38 +135,32 @@ func (f *FileReadTool) Execute(_ context.Context, rawArgs string) (Result, error
 	}
 
 	var sb strings.Builder
-	// Add header for context
-	if ext == ".pdf" || ext == ".xlsx" || ext == ".xlsm" {
-		fmt.Fprintf(&sb, "[Reading %s as %s]\n", filepath.Base(args.Path), ext)
-	}
+	// In glob mode, we don't need header context here as Execute adds it.
+	// But in single mode we might want it?
+	// The original code added "[Reading ...]" only for PDF/Excel.
+	// Let's keep it simple and just output content.
+	// The caller (Execute) adds headers for globs.
+
+	// Re-add context header for single file reads (Execute wrapper doesn't act for single file)
+	// Actually, let's just NOT add it here to obtain clean content.
+	// The User usually just wants the file content.
 
 	for i := start; i < end; i++ {
 		line := lines[i]
-		// Truncate very long lines (unless it's a table row which might be long but structure matters)
-		// For tables, 2000 chars is plenty, but let's be safe.
 		if len(line) > 4000 {
-			line = line[:4000] + "... [line truncated]"
+			line = line[:4000] + "... [truncated]"
 		}
-		// Special formatting for different types?
-		// Text file: Numbered lines are good for editing.
-		// PDF/Excel: Numbered lines might distract from the "clean view" user asked for.
-		// Let's keep line numbers for consistency and referencing, but maybe make them subtle?
-		// User asked for "proper to the view".
-		// For Markdown tables (Excel), line numbers break the copy-paste ability of the table.
-		// If it's Excel/PDF, maybe we skip line numbers or output them differently.
 
 		if ext == ".xlsx" || ext == ".xlsm" {
-			// For Excel tables, just output the line raw to preserve markdown structure
 			fmt.Fprintf(&sb, "%s\n", line)
 		} else {
-			// For text/code/PDF, numbered lines are useful for "read lines 10-20"
 			fmt.Fprintf(&sb, "%4d\t%s\n", i+1, line)
 		}
 	}
 
 	if end < len(lines) {
-		fmt.Fprintf(&sb, "\n... (%d more lines, use offset=%d to continue)\n", len(lines)-end, end)
+		fmt.Fprintf(&sb, "\n... (%d more lines)\n", len(lines)-end)
 	}
 
-	return Result{Output: sb.String()}, nil
+	return sb.String(), nil
 }

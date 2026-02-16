@@ -7,40 +7,40 @@ import (
 	"regexp"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	DefaultProvider string                    `yaml:"default_provider"`
-	DefaultModel    string                    `yaml:"default_model"`
-	Providers       map[string]ProviderConfig `yaml:"providers"`
-	Tools           ToolsConfig               `yaml:"tools"`
-	Orchestrator    OrchestratorConfig        `yaml:"orchestrator"`
-	Theme           string                    `yaml:"theme"`
-	MaxTurns        int                       `yaml:"max_turns"`
-	MaxTokens       int                       `yaml:"max_tokens"`
+	DefaultProvider string                    `yaml:"default_provider" mapstructure:"default_provider"`
+	DefaultModel    string                    `yaml:"default_model" mapstructure:"default_model"`
+	Providers       map[string]ProviderConfig `yaml:"providers" mapstructure:"providers"`
+	Tools           ToolsConfig               `yaml:"tools" mapstructure:"tools"`
+	Orchestrator    OrchestratorConfig        `yaml:"orchestrator" mapstructure:"orchestrator"`
+	Theme           string                    `yaml:"theme" mapstructure:"theme"`
+	MaxTurns        int                       `yaml:"max_turns" mapstructure:"max_turns"`
+	MaxTokens       int                       `yaml:"max_tokens" mapstructure:"max_tokens"`
 }
 
 type OrchestratorConfig struct {
-	Enabled      bool `yaml:"enabled"`
-	AutoDetect   bool `yaml:"auto_detect"`
-	Parallel     bool `yaml:"parallel"`
-	MaxRetries   int  `yaml:"max_retries"`
-	MaxSteps     int  `yaml:"max_steps"`
-	ShowProgress bool `yaml:"show_progress"`
+	Enabled      bool `yaml:"enabled" mapstructure:"enabled"`
+	AutoDetect   bool `yaml:"auto_detect" mapstructure:"auto_detect"`
+	Parallel     bool `yaml:"parallel" mapstructure:"parallel"`
+	MaxRetries   int  `yaml:"max_retries" mapstructure:"max_retries"`
+	MaxSteps     int  `yaml:"max_steps" mapstructure:"max_steps"`
+	ShowProgress bool `yaml:"show_progress" mapstructure:"show_progress"`
 }
 
 type ProviderConfig struct {
-	Type    string `yaml:"type"`
-	BaseURL string `yaml:"base_url"`
-	APIKey  string `yaml:"api_key"`
-	Model   string `yaml:"model"`
+	Type    string `yaml:"type" mapstructure:"type"`
+	BaseURL string `yaml:"base_url" mapstructure:"base_url"`
+	APIKey  string `yaml:"api_key" mapstructure:"api_key"`
+	Model   string `yaml:"model" mapstructure:"model"`
 }
 
 type ToolsConfig struct {
-	AutoApprove        []string `yaml:"auto_approve"`
-	AllowedCommands    []string `yaml:"allowed_commands"`
-	DisallowedCommands []string `yaml:"disallowed_commands"`
+	AutoApprove        []string `yaml:"auto_approve" mapstructure:"auto_approve"`
+	AllowedCommands    []string `yaml:"allowed_commands" mapstructure:"allowed_commands"`
+	DisallowedCommands []string `yaml:"disallowed_commands" mapstructure:"disallowed_commands"`
 }
 
 var envVarRe = regexp.MustCompile(`\$([A-Z_][A-Z0-9_]*)`)
@@ -58,7 +58,7 @@ func expandEnv(s string) string {
 func DefaultConfig() *Config {
 	return &Config{
 		DefaultProvider: "ollama",
-		DefaultModel:    "glm4",
+		DefaultModel:    "qwen2.5-coder:7b",
 		Theme:           "green",
 		MaxTurns:        50,
 		MaxTokens:       100000,
@@ -82,21 +82,44 @@ func configPath() string {
 
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
-	data, err := os.ReadFile(configPath())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+
+	// Search paths
+	viper.AddConfigPath(".")
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		viper.AddConfigPath(filepath.Join(xdg, "aseity"))
+	}
+	home, _ := os.UserHomeDir()
+	viper.AddConfigPath(filepath.Join(home, ".config", "aseity"))
+
+	// Environment variables
+	viper.SetEnvPrefix("ASEITY")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	// Read config
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			// Config file was found but another error produced
+			return nil, err
 		}
+		// Config file not found; ignore and use defaults
+	}
+
+	// Unmarshal
+	if err := viper.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, err
-	}
+
+	// Manual expansion for keys in config file
 	for name, p := range cfg.Providers {
 		p.APIKey = expandEnv(p.APIKey)
 		p.BaseURL = expandEnv(p.BaseURL)
 		cfg.Providers[name] = p
 	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

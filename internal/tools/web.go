@@ -78,7 +78,7 @@ func (w *WebSearchTool) Execute(ctx context.Context, rawArgs string) (Result, er
 
 	var sb strings.Builder
 	for i, r := range results {
-		fmt.Fprintf(&sb, "%d. %s\n   %s\n   %s\n\n", i+1, r.title, r.url, r.snippet)
+		fmt.Fprintf(&sb, "Result %d:\nTitle: %s\nURL: %s\nSnippet: %s\n\n", i+1, r.title, r.url, r.snippet)
 	}
 	return Result{Output: sb.String()}, nil
 }

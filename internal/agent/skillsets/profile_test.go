@@ -6,19 +6,22 @@ import (
 
 func TestDetectModelProfile(t *testing.T) {
 	tests := []struct {
-		modelName    string
-		expectedTier int
-		expectedFC   bool
+		modelName        string
+		expectedTier     int
+		expectedStrategy string
+		expectedFC       bool
 	}{
-		{"gpt-4", 1, true},
-		{"gpt-4o", 1, true},
-		{"gpt-4-turbo", 1, true}, // Fuzzy match
-		{"claude-3.5-sonnet", 1, true},
-		{"qwen2.5:14b", 2, false},
-		{"deepseek-r1:14b", 2, false},
-		{"qwen2.5:7b", 3, false},
-		{"qwen2.5:3b", 4, false},
-		{"unknown-model", 3, false}, // Default to Tier 3
+		{"gpt-4", 1, "minimal", true},
+		{"gpt-4o", 1, "minimal", true},
+		{"gpt-4-turbo", 1, "minimal", true}, // Fuzzy match
+		{"claude-3.5-sonnet", 1, "minimal", true},
+		{"qwen2.5:14b", 2, "react", false},
+		{"deepseek-r1:14b", 2, "react", false},
+		{"qwen2.5-coder:14b", 2, "react", false}, // New Tier 2
+		{"qwen2.5-coder:7b", 3, "guided", false}, // New Tier 3 (JSON Fallback)
+		{"qwen2.5:7b", 3, "guided", false},
+		{"qwen2.5:3b", 4, "template", false},
+		{"unknown-model", 3, "guided", false}, // Default to Tier 3
 	}
 
 	for _, tt := range tests {
@@ -26,6 +29,9 @@ func TestDetectModelProfile(t *testing.T) {
 			profile := DetectModelProfile(tt.modelName)
 			if profile.Tier != tt.expectedTier {
 				t.Errorf("Expected tier %d, got %d", tt.expectedTier, profile.Tier)
+			}
+			if profile.PromptStrategy != tt.expectedStrategy {
+				t.Errorf("Expected strategy %q, got %q", tt.expectedStrategy, profile.PromptStrategy)
 			}
 			if profile.SupportsNativeFC != tt.expectedFC {
 				t.Errorf("Expected native FC %v, got %v", tt.expectedFC, profile.SupportsNativeFC)

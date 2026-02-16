@@ -11,7 +11,7 @@ import (
 // TestDefaultModel verifies qwen2.5:14b is the default
 func TestDefaultModel(t *testing.T) {
 	cfg := config.DefaultConfig()
-	expected := "qwen2.5:14b"
+	expected := "glm4"
 
 	if cfg.DefaultModel != expected {
 		t.Errorf("Default model = %q, want %q", cfg.DefaultModel, expected)

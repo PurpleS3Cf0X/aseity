@@ -30,6 +30,8 @@ A powerful AI coding assistant that runs in your terminal. Connect to local mode
 - **Hybrid Evaluation** — **New in v1.1.2!** Built-in "Judge" tool allows agents to request semantic review of their work
 - **Auto-Verification** — **New in v1.1.2!** Agents can self-correct by looping through a draft-review-fix cycle automatically
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a technical deep dive.
+
 ## Quick Start
 
 ### Install
@@ -107,7 +109,19 @@ aseity "Research Go concurrency patterns on go.dev AND concurrency in Rust on ru
 ```
 Aseity will spawn parallel browser instances to fetch both pages at once.
 
-### Multi-Agent Orchestrator (Experimental - New in v2.25.0)
+### Deep Research Mode (New in v3.1.0)
+Force Aseity to conduct a comprehensive, multi-step research session without ambiguity:
+
+```bash
+aseity --deep-research "Analysis of the current state of fusion energy"
+```
+
+This mode bypasses the intent parser and guarantees the orchestrator will:
+1.  Perform multiple web searches
+2.  Read and analyze key pages (using `web_fetch`)
+3.  Synthesize a detailed report
+
+### Multi-Agent Orchestrator (Experimental - Updated in v3.1.0)
 
 For complex queries that require multiple steps, use the orchestrator mode:
 
@@ -332,6 +346,12 @@ You can ask Aseity to delete it:
 > Delete the LinuxExpert agent.
 ```
 
+### Memory System (New in v3.0.0)
+Aseity now uses a formal Memory Store interface to persist your context.
+- **Auto-Memory**: Automatically learns your preferences (e.g., "I prefer TypeScript") and project facts ("API runs on port 8080") and saves them to `~/.config/aseity/memory/auto_memory.json`.
+- **Project Context**: Reads `ASEITY.md` or `CLAUDE.md` in your project root to understand architecture and code style.
+- **Future-Proof**: The system is designed to plug in Vector Databases (RAG) for long-term recall in future updates.
+
 ## Configuration
 
 Create `~/.config/aseity/config.yaml`:
@@ -375,6 +395,11 @@ tools:
 ```
 
 Environment variables (like `$OPENAI_API_KEY`) are automatically expanded.
+
+**New in v3.0.0**:
+- **Environment Overrides**: Set any config option via env vars (e.g., `ASEITY_DEFAULT_MODEL=gpt-4o`).
+- **.env Support**: Aseity automatically loads `.env` files from the current directory.
+- **XDG Config**: Supports `~/.config/aseity/config.yaml`, `$XDG_CONFIG_HOME`, and local `config.yaml`.
 
 ## Docker
 

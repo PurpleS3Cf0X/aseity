@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jeanpaul/aseity/internal/agent"
 	"github.com/jeanpaul/aseity/internal/provider"
@@ -13,6 +15,23 @@ import (
 // Run executes the agent in headless mode.
 // It streams answer tokens to stdout and logs/tool activity to stderr.
 func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, prompt string) error {
+	// Create cancellation context for graceful shutdown
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Handle SIGINT (Ctrl+C)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		select {
+		case <-sigCh:
+			fmt.Fprintln(os.Stderr, "\n[Received Interrupt directly. Cancelling agent...]")
+			cancel()
+		case <-ctx.Done():
+			// Context finished normally
+		}
+	}()
+
 	// Create the agent
 	agt := agent.New(prov, toolReg, "")
 
@@ -26,6 +45,7 @@ func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, p
 	for {
 		select {
 		case <-ctx.Done():
+			// If cancelled by signal
 			return ctx.Err()
 		case evt := <-events:
 			switch evt.Type {
@@ -112,6 +132,10 @@ func Run(ctx context.Context, prov provider.Provider, toolReg *tools.Registry, p
 				n, _ := os.Stdin.Read(buf[:])
 				if n > 0 {
 					input = string(buf[:n])
+				}
+				// Strip newline
+				if len(input) > 0 && input[len(input)-1] == '\n' {
+					input = input[:len(input)-1]
 				}
 				agt.InputCh <- input
 

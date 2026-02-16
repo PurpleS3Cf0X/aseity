@@ -69,7 +69,14 @@ func (f *FileWriteTool) Execute(_ context.Context, rawArgs string) (Result, erro
 		if err := os.WriteFile(args.Path, []byte(content), 0644); err != nil {
 			return Result{Error: err.Error()}, nil
 		}
-		return Result{Output: fmt.Sprintf("File edited successfully. Changes:\n\n```diff\n%s\n```", diff)}, nil
+		return Result{
+			Output: fmt.Sprintf("File edited successfully. Changes:\n\n```diff\n%s\n```", diff),
+			Data: map[string]any{
+				"type": "diff",
+				"path": args.Path,
+				"diff": diff,
+			},
+		}, nil
 	}
 
 	// For full overwrite, check if file exists for diff
@@ -89,5 +96,12 @@ func (f *FileWriteTool) Execute(_ context.Context, rawArgs string) (Result, erro
 	edits := myers.ComputeEdits(span.URIFromPath(args.Path), oldContent, args.Content)
 	diff := fmt.Sprint(gotextdiff.ToUnified(args.Path, args.Path, oldContent, edits))
 
-	return Result{Output: fmt.Sprintf("File written successfully. Changes:\n\n```diff\n%s\n```", diff)}, nil
+	return Result{
+		Output: fmt.Sprintf("File written successfully. Changes:\n\n```diff\n%s\n```", diff),
+		Data: map[string]any{
+			"type": "diff",
+			"path": args.Path,
+			"diff": diff,
+		},
+	}, nil
 }

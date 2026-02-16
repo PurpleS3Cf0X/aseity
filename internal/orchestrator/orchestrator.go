@@ -18,14 +18,16 @@ type Orchestrator struct {
 	maxRetries     int
 	maxSteps       int
 	stateDir       string
-	EnableParallel bool // Enable parallel execution of independent steps
+	EnableParallel bool          // Enable parallel execution of independent steps
+	ForceIntent    *IntentOutput // If set, skips intent parsing
 }
 
 // Config holds orchestrator configuration
 type Config struct {
-	MaxRetries int
-	MaxSteps   int
-	StateDir   string
+	MaxRetries  int
+	MaxSteps    int
+	StateDir    string
+	ForceIntent *IntentOutput
 }
 
 // NewOrchestrator creates a new orchestrator
@@ -39,11 +41,12 @@ func NewOrchestrator(prov provider.Provider, reg *tools.Registry, cfg *Config) *
 	}
 
 	return &Orchestrator{
-		provider:   prov,
-		registry:   reg,
-		maxRetries: cfg.MaxRetries,
-		maxSteps:   cfg.MaxSteps,
-		stateDir:   cfg.StateDir,
+		provider:    prov,
+		registry:    reg,
+		maxRetries:  cfg.MaxRetries,
+		maxSteps:    cfg.MaxSteps,
+		stateDir:    cfg.StateDir,
+		ForceIntent: cfg.ForceIntent,
 	}
 }
 
@@ -58,10 +61,23 @@ func (o *Orchestrator) ProcessQuery(ctx context.Context, query string) (string, 
 
 		// Phase 1: Intent Parsing
 		state.SetPhase("intent")
-		intentOutput, err := o.extractIntent(ctx, query, state)
-		if err != nil {
-			state.AddError(err)
-			state.AddWarning(fmt.Sprintf("Intent parsing failed, using default: %s", err.Error()))
+		var intentOutput *IntentOutput
+		var err error
+
+		if o.ForceIntent != nil {
+			// Skip parsing if intent is forced
+			intentOutput = o.ForceIntent
+			// Update entities with current query if generic
+			if len(intentOutput.Entities) == 0 || intentOutput.Entities[0] == "query" {
+				intentOutput.Entities = []string{query}
+			}
+			state.AddWarning(fmt.Sprintf("Intent forced to: %s", intentOutput.IntentType))
+		} else {
+			intentOutput, err = o.extractIntent(ctx, query, state)
+			if err != nil {
+				state.AddError(err)
+				state.AddWarning(fmt.Sprintf("Intent parsing failed, using default: %s", err.Error()))
+			}
 		}
 		state.Intent = intentOutput
 

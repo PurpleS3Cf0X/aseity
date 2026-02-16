@@ -7,10 +7,9 @@ import (
 // TestDefaultModel verifies qwen2.5:14b is the default
 func TestDefaultModel(t *testing.T) {
 	cfg := DefaultConfig()
-	expected := "qwen2.5:14b"
 
-	if cfg.DefaultModel != expected {
-		t.Errorf("Default model = %q, want %q", cfg.DefaultModel, expected)
+	if cfg.DefaultModel != "glm4" {
+		t.Errorf("Default model = %q, want %q", cfg.DefaultModel, "glm4")
 	}
 
 	t.Logf("✅ Default model is %s", cfg.DefaultModel)

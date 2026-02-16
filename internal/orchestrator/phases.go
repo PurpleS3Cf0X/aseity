@@ -29,6 +29,7 @@ Intent Types:
 - execute: User wants to run commands or scripts
 - create: User wants to create new files/resources
 - modify: User wants to edit existing files/resources
+- deep_research: User wants deep investigation (search + read + summarize) into a topic
 - general: Conversational or unclear intent
 
 Complexity Levels:
@@ -70,19 +71,32 @@ User: %s`, IntentParserPrompt, output, err.Error(), query)
 func BuildPlannerPrompt(intent *IntentOutput, toolsSection string, maxSteps int) string {
 	entities := strings.Join(intent.Entities, ", ")
 
-	return fmt.Sprintf(`You are a Task Planner. Based on the intent, create a step-by-step plan using ONLY available tools.
+	return fmt.Sprintf(`You are a Task Planner. Your goal is to create a valid JSON plan for the user's intent.
 
-CRITICAL RULES:
-1. Output ONLY valid JSON - no explanations, no markdown, no extra text
-2. Use ONLY tools from the list below
-3. Each step must have valid parameters for that tool
-4. Steps must be in logical order
-5. Maximum %d steps
+INSTRUCTIONS:
+1. First, ANALYZE the request and available tools in a <reasoning> text block.
+2. Then, GENERATE the JSON plan based on your reasoning.
+3. The JSON must be valid and adhere to the schema.
+4. "depends_on" field must use 1-BASED step numbers referring to PREVIOUS steps. Never use 0.
+5. Do NOT include comments (like // or /* */) inside the JSON. Put all remarks in the <reasoning> block.
+
+5. Do NOT include comments (like // or /* */) inside the JSON. Put all remarks in the <reasoning> block.
+
+CRITICAL TOOL USAGE RULES:
+- Do NOT use 'bash' to run 'open', 'xdg-open', 'start', 'curl', or 'wget'.
+- ALWAYS use 'web_fetch' to read websites.
+- ALWAYS use 'web_search' to find information.
 
 Available Tools:
 %s
 
-Required JSON format:
+Special Instructions for 'deep_research':
+If the intent is 'deep_research', you MUST create a multi-step plan:
+1. web_search: Search for the topic.
+2. read_page: Read the content of the most relevant 2-3 search results.
+3. (Implicit): The results will be synthesized in the final phase.
+
+Required JSON Schema:
 {
   "steps": [
     {
@@ -90,20 +104,25 @@ Required JSON format:
       "action": "tool_name",
       "parameters": {"param": "value"},
       "reasoning": "Why this step is needed",
-      "depends_on": [optional array of step numbers this depends on]
+      "depends_on": []
     }
   ],
-  "expected_outcome": "What the plan should achieve"
+  "expected_outcome": "Goal description"
 }
 
-Now create a plan for this intent:
+Special Instructions for 'search' and 'deep_research':
+If the intent is 'search' or 'deep_research', you MUST create a multi-step plan:
+1. web_search: Search for the topic.
+2. web_fetch / read_page: Read the content of the most relevant results. Do NOT stop at search results.
+3. (Implicit): The results will be synthesized in the final phase.
 
-Intent Type: %s
-Reasoning: %s
+Intent:
+Type: %s
+Goal: %s
 Entities: %s
 Complexity: %s
 
-Output ONLY the JSON plan:`, maxSteps, toolsSection, intent.IntentType, intent.Reasoning, entities, intent.Complexity)
+Output your reasoning followed by the JSON plan now:`, toolsSection, intent.IntentType, intent.Reasoning, entities, intent.Complexity)
 }
 
 // CreatePlan generates a plan from the intent
@@ -117,7 +136,10 @@ func CreatePlan(intent *IntentOutput, toolsSection string, callModel func(string
 			return plan, nil
 		}
 
+		fmt.Printf("\n[DEBUG] Plan Creation Attempt %d Failed.\nOutput:\n%s\nError: %v\n", attempt, output, err)
+
 		if attempt == maxRetries {
+			fmt.Printf("\n[DEBUG] Plan Creation Failed. Last Output:\n%s\n[DEBUG] Error: %v\n", output, err)
 			return nil, fmt.Errorf("plan creation failed after %d attempts: %w", maxRetries, err)
 		}
 

@@ -50,6 +50,7 @@ func main() {
 	maxRetriesFlag := flag.Int("max-retries", 3, "Maximum retries for orchestrator")
 	maxStepsFlag := flag.Int("max-steps", 10, "Maximum steps for orchestrator")
 	parallelFlag := flag.Bool("parallel", false, "Enable parallel execution in orchestrator")
+	deepResearchFlag := flag.Bool("deep-research", false, "Enable Deep Research mode (forces deep analysis)")
 
 	flag.Usage = showHelp
 	flag.Parse()
@@ -120,6 +121,17 @@ func main() {
 			docker := len(args) > 1 && args[1] == "--docker"
 			cmdSetup(docker)
 			return
+		case "benchmark":
+			dataset := ""
+			judge := "llama3"
+			if len(args) > 1 {
+				dataset = args[1]
+			}
+			if len(args) > 2 {
+				judge = args[2]
+			}
+			cmdBenchmark(dataset, judge)
+			return
 		case "help":
 			showHelp()
 			return
@@ -154,8 +166,9 @@ func main() {
 	}
 
 	// Orchestrator Mode (if enabled)
-	if *orchestratorFlag {
-		launchOrchestrator(cfg, provName, modelName, initialPrompt, *orchestratorDebugFlag, *maxRetriesFlag, *maxStepsFlag, *parallelFlag)
+	// Orchestrator Mode (if enabled)
+	if *orchestratorFlag || *deepResearchFlag {
+		launchOrchestrator(cfg, provName, modelName, initialPrompt, *orchestratorDebugFlag, *maxRetriesFlag, *maxStepsFlag, *parallelFlag, *deepResearchFlag)
 		return
 	}
 
@@ -163,13 +176,27 @@ func main() {
 	// Actually for "scriptable" tools, we might want to be quiet.
 	// But let's keep it for now, TUI banners need to be suppressed in headless.
 
+	// Check if model is available (for ollama provider)
+	// We do this BEFORE headless check so it works for orchestrator/headless modes too
+	pcfg, _ := cfg.ProviderFor(provName)
+	if provName == "ollama" || (pcfg.Type == "openai" && strings.Contains(pcfg.BaseURL, "11434")) {
+		if !setup.IsModelAvailable(modelName) {
+			fmt.Printf("  %s\n", tui.SpinnerStyle.Render("● Model "+modelName+" not found, pulling..."))
+			if err := setup.PullModel(modelName); err != nil {
+				fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ Failed to pull model: "+err.Error()))
+				fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Try: ollama pull "+modelName))
+				os.Exit(1)
+			}
+			fmt.Printf("\r  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" ready"))
+		}
+	}
+
 	if !isHeadless {
 		// ... TUI Health Checks (only showing banner if not headless)
 		fmt.Print(tui.GradientBanner())
 		fmt.Printf("\n  %s  %s\n", tui.StatusProviderStyle.Render(" "+provName+" "), tui.StatusBarStyle.Render(" "+modelName+" "))
 
 		// ... (Health check logic, same as before) ...
-		pcfg, _ := cfg.ProviderFor(provName)
 		fmt.Printf("  %s", tui.SpinnerStyle.Render("● Checking provider connectivity..."))
 		status := health.Check(context.Background(), pcfg.Type, pcfg.BaseURL, pcfg.APIKey)
 		if !status.Reachable {
@@ -186,18 +213,7 @@ func main() {
 			fmt.Printf("\r  %s (%s)\n", tui.BannerStyle.Render("✓ Connected"), status.Latency.Round(time.Millisecond))
 		}
 
-		// Check if model is available (for ollama provider)
-		if provName == "ollama" || (pcfg.Type == "openai" && strings.Contains(pcfg.BaseURL, "11434")) {
-			if !setup.IsModelAvailable(modelName) {
-				fmt.Printf("  %s\n", tui.SpinnerStyle.Render("● Model "+modelName+" not found, pulling..."))
-				if err := setup.PullModel(modelName); err != nil {
-					fmt.Printf("\r  %s\n", tui.ErrorStyle.Render("✗ Failed to pull model: "+err.Error()))
-					fmt.Printf("  %s\n\n", tui.HelpStyle.Render("Try: ollama pull "+modelName))
-					os.Exit(1)
-				}
-				fmt.Printf("\r  %s\n", tui.BannerStyle.Render("✓ Model "+modelName+" ready"))
-			}
-		}
+		// (Model check removed from here as it's done above)
 
 		// ... End TUI Health Checks
 		fmt.Println()

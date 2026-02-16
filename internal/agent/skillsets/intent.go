@@ -157,17 +157,20 @@ func BuildContextualPrompt(intent Intent, profile ModelProfile) string {
 	// Get relevant skillsets for this intent
 	relevantSkills := GetSkillsetsForIntent(intent)
 
-	// Only include training for weak skillsets that are relevant
-	b.WriteString("\n## 🎯 Context-Specific Guidance\n\n")
-
+	var content strings.Builder
 	for _, skill := range relevantSkills {
 		// Check if model is weak in this skill
 		if proficiency, ok := profile.Skillsets[skill]; ok {
 			if proficiency < 0.85 {
-				b.WriteString(GetSkillTraining(skill))
-				b.WriteString("\n")
+				content.WriteString(GetSkillTraining(skill))
+				content.WriteString("\n")
 			}
 		}
+	}
+
+	if content.Len() > 0 {
+		b.WriteString("\n## 🎯 Context-Specific Guidance\n\n")
+		b.WriteString(content.String())
 	}
 
 	return b.String()
